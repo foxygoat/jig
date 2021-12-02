@@ -14,6 +14,9 @@ in a second terminal call it with
 
 	client
 
+Instead of `server` try starting `dynamicserver` to run a gRPC server
+without code generation.
+
 ## Development
 
 	. ./bin/activate-hermit
