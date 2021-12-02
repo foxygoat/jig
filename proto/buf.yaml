@@ -1,0 +1,6 @@
+version: v1
+lint:
+  ignore:
+  - google
+  except:
+  - PACKAGE_VERSION_SUFFIX
