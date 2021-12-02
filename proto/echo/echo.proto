@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package echo;
+option go_package = "foxygo.at/pony/pb/echo";
+import "google/api/annotations.proto";
+
+// Echo service.
+service EchoService {
+  // Hello greets.
+  rpc Hello (HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = { post:"/api/echo/hello" body:"*" };
+  };
+  // HelloStream greets repeatedly.
+  rpc HelloStream (HelloStreamRequest) returns (stream HelloStreamResponse) {
+    option (google.api.http) = { post:"/api/echo/stream" body:"*" };
+  };
+}
+
+message HelloRequest {
+  string message = 1;
+}
+
+message HelloResponse {
+  string response = 1;
+}
+
+message HelloStreamRequest {
+  string message = 1;
+}
+
+message HelloStreamResponse {
+  string response = 1;
+}
