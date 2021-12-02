@@ -70,7 +70,11 @@ protos:  ## Generate Go pb and grpc binding for .proto files
 		$(PROTOFILES)
 	gofumpt -w pb
 
-.PHONY: protos
+
+pb:  ## Generate binary FileDescriptorSet output pb file
+	protoc -I proto -o testdata/all.pb --include_imports $(PROTOFILES)
+
+.PHONY: pb proto
 
 # --- Release -------------------------------------------------------------------
 release: nexttag  ## Tag and release binaries for different OS on GitHub release
