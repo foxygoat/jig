@@ -14,7 +14,7 @@ import (
 var version = "v0.0.0"
 
 type config struct {
-	Address string           `help:"hostname:port" default:"localhost:9090"`
+	Address string           `help:"hostname:port" default:"localhost:8080"`
 	Message string           `arg:"" help:"message to send" default:"Hello 🌏"`
 	Version kong.VersionFlag `short:"V" help:"Print version information" group:"Other:"`
 
