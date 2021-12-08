@@ -2,12 +2,12 @@ package serve
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"path"
 
 	"github.com/google/go-jsonnet"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -37,35 +37,100 @@ func (m method) fullMethod() string {
 }
 
 func (m method) call(ss serverStream) error {
-	if m.desc.IsStreamingClient() || m.desc.IsStreamingServer() {
-		return status.Errorf(codes.Unimplemented, "streaming not supported: %s", m.desc.FullName())
+	if m.desc.IsStreamingClient() {
+		return m.streamingClientCall(ss)
 	}
+	return m.unaryClientCall(ss)
+}
 
+func (m method) unaryClientCall(ss serverStream) error {
+	// Handle unary client (request), with either unary or streaming server (response).
 	req := dynamicpb.NewMessage(m.desc.Input())
 	if err := ss.RecvMsg(req); err != nil {
 		return err
 	}
-	inputJSON, err := makeInputJSON(req)
+
+	input, err := makeInputJSON(req)
 	if err != nil {
 		return err
 	}
 
+	return m.evalJsonnet(input, ss)
+}
+
+func (m method) streamingClientCall(ss serverStream) error {
+	var err error
+	var input string
+	var stream []*dynamicpb.Message
+	for {
+		msg := dynamicpb.NewMessage(m.desc.Input())
+		if err = ss.RecvMsg(msg); err != nil {
+			break
+		}
+		if !m.desc.IsStreamingServer() {
+			// For a unary response, we just collect all the messages on
+			// the input stream to pass once to jsonnet.
+			stream = append(stream, msg)
+			continue
+		}
+
+		// For a streaming response, we call jsonnet once for each message
+		// on the input stream and stream out the results.
+		input, err = makeInputJSON(msg)
+		if err != nil {
+			return err
+		}
+		if err = m.evalJsonnet(input, ss); err != nil {
+			return err
+		}
+	}
+
+	if !errors.Is(err, io.EOF) {
+		return err
+	}
+
+	if !m.desc.IsStreamingServer() {
+		input, err = makeStreamingInputJSON(stream)
+		if err != nil {
+			return err
+		}
+	} else if input == "" {
+		// We are a streaming server but have nothing on the input stream.
+		// Call jsonnet once with a null request so it can choose to stream
+		// messages back if it wants.
+		input = "{response: null}"
+	}
+	return m.evalJsonnet(input, ss)
+}
+
+func (m method) evalJsonnet(input string, ss serverStream) error {
 	vm := jsonnet.MakeVM()
 	// TODO(camh): Add jsonnext.Importer
-	vm.TLACode("input", inputJSON)
-	outputJSON, err := vm.EvaluateFile(m.filename)
+	fmt.Printf("eval input  = %s\n", input)
+	vm.TLACode("input", input)
+	output, err := vm.EvaluateFile(m.filename)
 	if err != nil {
 		return err
 	}
+	fmt.Printf("eval output = %s\n", output)
 
-	resp := dynamicpb.NewMessage(m.desc.Output())
-	if err := parseOutputJSON(outputJSON, resp); err != nil {
-		return err
+	stream, err := parseOutputJSON(output, m.desc)
+	for _, resp := range stream { // stream is nil (empty) on error
+		if err := ss.SendMsg(resp); err != nil {
+			return err
+		}
 	}
-	if err := ss.SendMsg(resp); err != nil {
-		return err
-	}
-	return nil
+	return err
+}
+
+type request struct {
+	Request json.RawMessage   `json:"request,omitempty"`
+	Stream  []json.RawMessage `json:"stream,omitempty"`
+}
+
+type response struct {
+	Response json.RawMessage   `json:"response"`
+	Stream   []json.RawMessage `json:"stream"`
 }
 
 func makeInputJSON(msg *dynamicpb.Message) (string, error) {
@@ -73,9 +138,7 @@ func makeInputJSON(msg *dynamicpb.Message) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	v := struct {
-		Request json.RawMessage `json:"request"`
-	}{Request: b}
+	v := request{Request: b}
 	input, err := json.Marshal(&v)
 	if err != nil {
 		return "", err
@@ -84,17 +147,52 @@ func makeInputJSON(msg *dynamicpb.Message) (string, error) {
 	return string(input), nil
 }
 
-func parseOutputJSON(output string, msg *dynamicpb.Message) error {
-	v := struct {
-		Response json.RawMessage `json:"response"`
-	}{}
+func makeStreamingInputJSON(stream []*dynamicpb.Message) (string, error) {
+	v := request{Stream: make([]json.RawMessage, 0, len(stream))}
+	for _, msg := range stream {
+		b, err := protojson.Marshal(msg)
+		if err != nil {
+			return "", err
+		}
+		v.Stream = append(v.Stream, b)
+	}
+
+	input, err := json.Marshal(&v)
+	if err != nil {
+		return "", err
+	}
+
+	return string(input), nil
+}
+
+func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) ([]*dynamicpb.Message, error) {
+	v := response{}
 	if err := json.Unmarshal([]byte(output), &v); err != nil {
-		return err
+		return nil, err
 	}
 
-	if err := protojson.Unmarshal(v.Response, msg); err != nil {
-		return err
+	var stream []*dynamicpb.Message
+	switch {
+	case desc.IsStreamingServer():
+		stream = make([]*dynamicpb.Message, 0, len(v.Stream))
+		for _, jsonMsg := range v.Stream {
+			msg := dynamicpb.NewMessage(desc.Output())
+			if err := protojson.Unmarshal(jsonMsg, msg); err != nil {
+				return nil, err
+			}
+			stream = append(stream, msg)
+		}
+
+	case v.Response != nil:
+		msg := dynamicpb.NewMessage(desc.Output())
+		if err := protojson.Unmarshal(v.Response, msg); err != nil {
+			return nil, err
+		}
+		stream = append(stream, msg)
+
+	default:
+		return nil, errors.New("Unary method did not return result")
 	}
 
-	return nil
+	return stream, nil
 }
