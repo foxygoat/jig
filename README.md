@@ -29,17 +29,45 @@ Put jsonnet method definitions together in a directory, each file named
 `<pkg>.<service>.<method>.jsonnet`. The jsonnet file is (re-)evaluated when the
 gRPC server receives a call to that method.
 
-The request protobuf message is marshaled to JSON and set as the `input` jsonnet
-top-level argument when evaluating the jsonnet method. It is marshaled as:
+Request protobuf messages are marshaled to JSON and passed to the jsonnet method
+definition function as the `input` parameter. If the method is a unary,
+server-streaming or bidirectional streaming method, the request message is
+placed in the `request` field of `input`:
 
     {
         request: { ...json-encoded gRPC request protobuf... }
     }
 
-The jsonnet method definition should be a function of the following form:
+If the method is a client-streaming method, the stream of request messages is
+placed in the `stream` field of `input` as an array:
+
+    {
+        stream: [ {request1}, {request2}, ...]
+    }
+
+For bidirectional streaming methods, the jsonnet method definition is evaluated
+once for each message on the request stream (with a single message in the
+`request` field). Once `EOF` has been received on the request stream, the
+jsonnet method definition is evaluated one more time with the `request` field
+set to `null`.
+
+Response protobuf messages are unmarshaled from the jsonnet evaluation of the
+method definition. The result must evaluate as an object with fields describing
+the response to send back to the gRPC client.
+
+If the method is a unary or client-streaming method, the result must have a
+`response` field that contains the response message encoded as JSON:
 
     function(input) {
         response: { ...json-encoded gRPC response protobuf... }
+    }
+
+If the method is a server- or bidirectional streaming method, the result must
+have a `stream` field that contains an array of response messages encoded as
+JSON:
+
+    function(input) {
+        stream: [ {response1}, {response2}, ... ]
     }
 
 The response can reference fields of the input using regular jsonnet references.
@@ -68,7 +96,13 @@ in a second terminal call it with
 
     client world
 
-Experiment with the jsonnet method file in the [testdata](./testdata)
+To see streaming, call it with
+
+    client --stream=server world
+    client --stream=client you me world
+    client --stream=bidi you me world
+
+Experiment with the jsonnet method files in the [testdata](./testdata)
 directory.
 
 Alternatively there is a traditional generated gRPC server that the same client
