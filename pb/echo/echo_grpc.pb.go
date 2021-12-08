@@ -20,8 +20,12 @@ const _ = grpc.SupportPackageIsVersion7
 type EchoServiceClient interface {
 	// Hello greets.
 	Hello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
-	// HelloStream greets repeatedly.
-	HelloStream(ctx context.Context, in *HelloStreamRequest, opts ...grpc.CallOption) (EchoService_HelloStreamClient, error)
+	// HelloClientStream greets everyone at once.
+	HelloClientStream(ctx context.Context, opts ...grpc.CallOption) (EchoService_HelloClientStreamClient, error)
+	// HelloServerStream greets repeatedly.
+	HelloServerStream(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (EchoService_HelloServerStreamClient, error)
+	// HelloBiDiStream greets everyone individually.
+	HelloBiDiStream(ctx context.Context, opts ...grpc.CallOption) (EchoService_HelloBiDiStreamClient, error)
 }
 
 type echoServiceClient struct {
@@ -41,12 +45,46 @@ func (c *echoServiceClient) Hello(ctx context.Context, in *HelloRequest, opts ..
 	return out, nil
 }
 
-func (c *echoServiceClient) HelloStream(ctx context.Context, in *HelloStreamRequest, opts ...grpc.CallOption) (EchoService_HelloStreamClient, error) {
-	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[0], "/echo.EchoService/HelloStream", opts...)
+func (c *echoServiceClient) HelloClientStream(ctx context.Context, opts ...grpc.CallOption) (EchoService_HelloClientStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[0], "/echo.EchoService/HelloClientStream", opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &echoServiceHelloStreamClient{stream}
+	x := &echoServiceHelloClientStreamClient{stream}
+	return x, nil
+}
+
+type EchoService_HelloClientStreamClient interface {
+	Send(*HelloRequest) error
+	CloseAndRecv() (*HelloResponse, error)
+	grpc.ClientStream
+}
+
+type echoServiceHelloClientStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *echoServiceHelloClientStreamClient) Send(m *HelloRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *echoServiceHelloClientStreamClient) CloseAndRecv() (*HelloResponse, error) {
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	m := new(HelloResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *echoServiceClient) HelloServerStream(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (EchoService_HelloServerStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[1], "/echo.EchoService/HelloServerStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &echoServiceHelloServerStreamClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -56,17 +94,48 @@ func (c *echoServiceClient) HelloStream(ctx context.Context, in *HelloStreamRequ
 	return x, nil
 }
 
-type EchoService_HelloStreamClient interface {
-	Recv() (*HelloStreamResponse, error)
+type EchoService_HelloServerStreamClient interface {
+	Recv() (*HelloResponse, error)
 	grpc.ClientStream
 }
 
-type echoServiceHelloStreamClient struct {
+type echoServiceHelloServerStreamClient struct {
 	grpc.ClientStream
 }
 
-func (x *echoServiceHelloStreamClient) Recv() (*HelloStreamResponse, error) {
-	m := new(HelloStreamResponse)
+func (x *echoServiceHelloServerStreamClient) Recv() (*HelloResponse, error) {
+	m := new(HelloResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *echoServiceClient) HelloBiDiStream(ctx context.Context, opts ...grpc.CallOption) (EchoService_HelloBiDiStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &EchoService_ServiceDesc.Streams[2], "/echo.EchoService/HelloBiDiStream", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &echoServiceHelloBiDiStreamClient{stream}
+	return x, nil
+}
+
+type EchoService_HelloBiDiStreamClient interface {
+	Send(*HelloRequest) error
+	Recv() (*HelloResponse, error)
+	grpc.ClientStream
+}
+
+type echoServiceHelloBiDiStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *echoServiceHelloBiDiStreamClient) Send(m *HelloRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *echoServiceHelloBiDiStreamClient) Recv() (*HelloResponse, error) {
+	m := new(HelloResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -79,8 +148,12 @@ func (x *echoServiceHelloStreamClient) Recv() (*HelloStreamResponse, error) {
 type EchoServiceServer interface {
 	// Hello greets.
 	Hello(context.Context, *HelloRequest) (*HelloResponse, error)
-	// HelloStream greets repeatedly.
-	HelloStream(*HelloStreamRequest, EchoService_HelloStreamServer) error
+	// HelloClientStream greets everyone at once.
+	HelloClientStream(EchoService_HelloClientStreamServer) error
+	// HelloServerStream greets repeatedly.
+	HelloServerStream(*HelloRequest, EchoService_HelloServerStreamServer) error
+	// HelloBiDiStream greets everyone individually.
+	HelloBiDiStream(EchoService_HelloBiDiStreamServer) error
 	mustEmbedUnimplementedEchoServiceServer()
 }
 
@@ -91,8 +164,14 @@ type UnimplementedEchoServiceServer struct {
 func (UnimplementedEchoServiceServer) Hello(context.Context, *HelloRequest) (*HelloResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Hello not implemented")
 }
-func (UnimplementedEchoServiceServer) HelloStream(*HelloStreamRequest, EchoService_HelloStreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method HelloStream not implemented")
+func (UnimplementedEchoServiceServer) HelloClientStream(EchoService_HelloClientStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method HelloClientStream not implemented")
+}
+func (UnimplementedEchoServiceServer) HelloServerStream(*HelloRequest, EchoService_HelloServerStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method HelloServerStream not implemented")
+}
+func (UnimplementedEchoServiceServer) HelloBiDiStream(EchoService_HelloBiDiStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method HelloBiDiStream not implemented")
 }
 func (UnimplementedEchoServiceServer) mustEmbedUnimplementedEchoServiceServer() {}
 
@@ -125,25 +204,77 @@ func _EchoService_Hello_Handler(srv interface{}, ctx context.Context, dec func(i
 	return interceptor(ctx, in, info, handler)
 }
 
-func _EchoService_HelloStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(HelloStreamRequest)
+func _EchoService_HelloClientStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EchoServiceServer).HelloClientStream(&echoServiceHelloClientStreamServer{stream})
+}
+
+type EchoService_HelloClientStreamServer interface {
+	SendAndClose(*HelloResponse) error
+	Recv() (*HelloRequest, error)
+	grpc.ServerStream
+}
+
+type echoServiceHelloClientStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *echoServiceHelloClientStreamServer) SendAndClose(m *HelloResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *echoServiceHelloClientStreamServer) Recv() (*HelloRequest, error) {
+	m := new(HelloRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func _EchoService_HelloServerStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(HelloRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(EchoServiceServer).HelloStream(m, &echoServiceHelloStreamServer{stream})
+	return srv.(EchoServiceServer).HelloServerStream(m, &echoServiceHelloServerStreamServer{stream})
 }
 
-type EchoService_HelloStreamServer interface {
-	Send(*HelloStreamResponse) error
+type EchoService_HelloServerStreamServer interface {
+	Send(*HelloResponse) error
 	grpc.ServerStream
 }
 
-type echoServiceHelloStreamServer struct {
+type echoServiceHelloServerStreamServer struct {
 	grpc.ServerStream
 }
 
-func (x *echoServiceHelloStreamServer) Send(m *HelloStreamResponse) error {
+func (x *echoServiceHelloServerStreamServer) Send(m *HelloResponse) error {
 	return x.ServerStream.SendMsg(m)
+}
+
+func _EchoService_HelloBiDiStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(EchoServiceServer).HelloBiDiStream(&echoServiceHelloBiDiStreamServer{stream})
+}
+
+type EchoService_HelloBiDiStreamServer interface {
+	Send(*HelloResponse) error
+	Recv() (*HelloRequest, error)
+	grpc.ServerStream
+}
+
+type echoServiceHelloBiDiStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *echoServiceHelloBiDiStreamServer) Send(m *HelloResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *echoServiceHelloBiDiStreamServer) Recv() (*HelloRequest, error) {
+	m := new(HelloRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // EchoService_ServiceDesc is the grpc.ServiceDesc for EchoService service.
@@ -160,9 +291,20 @@ var EchoService_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "HelloStream",
-			Handler:       _EchoService_HelloStream_Handler,
+			StreamName:    "HelloClientStream",
+			Handler:       _EchoService_HelloClientStream_Handler,
+			ClientStreams: true,
+		},
+		{
+			StreamName:    "HelloServerStream",
+			Handler:       _EchoService_HelloServerStream_Handler,
 			ServerStreams: true,
+		},
+		{
+			StreamName:    "HelloBiDiStream",
+			Handler:       _EchoService_HelloBiDiStream_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "echo/echo.proto",

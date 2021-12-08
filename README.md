@@ -14,8 +14,11 @@ in a second terminal call it with
 
 	client
 
-Instead of `server` try starting `dynamicserver` to run a gRPC server
-without code generation.
+To see streaming, call it with
+
+        client --stream=server
+        client --stream=client you me world
+        client --stream=bidi you me world
 
 ## Development
 
