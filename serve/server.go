@@ -23,26 +23,39 @@ type Server struct {
 	ProtoSet  string
 
 	methods map[string]method
+	gs      *grpc.Server
+	lis     net.Listener
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
 
-func (s *Server) Run() error {
-	if err := s.loadMethods(); err != nil {
-		return err
-	}
-
-	gs := grpc.NewServer(
-		grpc.StreamInterceptor(s.intercept),
-		grpc.UnknownServiceHandler(unknownHandler),
-	)
-
-	lis, err := net.Listen("tcp", s.Listen)
+func (s *Server) setup() error {
+	err := s.loadMethods()
 	if err != nil {
 		return err
 	}
 
-	return gs.Serve(lis)
+	s.gs = grpc.NewServer(
+		grpc.StreamInterceptor(s.intercept),
+		grpc.UnknownServiceHandler(unknownHandler),
+	)
+
+	s.lis, err = net.Listen("tcp", s.Listen)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) Run() error {
+	if err := s.setup(); err != nil {
+		return err
+	}
+	return s.gs.Serve(s.lis)
+}
+
+func (s *Server) Stop() {
+	s.gs.GracefulStop()
 }
 
 func (s *Server) loadMethods() error {
@@ -98,4 +111,20 @@ func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.Str
 // it to jsonnet.
 func unknownHandler(_ interface{}, stream grpc.ServerStream) error {
 	return errUnknownHandler
+}
+
+type TestServer struct {
+	Server
+}
+
+func (s *TestServer) Start() error {
+	if err := s.setup(); err != nil {
+		return err
+	}
+	go s.gs.Serve(s.lis) //nolint:errcheck
+	return nil
+}
+
+func (s *TestServer) Addr() string {
+	return s.lis.Addr().String()
 }

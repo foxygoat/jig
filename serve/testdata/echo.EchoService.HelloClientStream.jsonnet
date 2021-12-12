@@ -1,0 +1,1 @@
+../../testdata/echo.EchoService.HelloClientStream.jsonnet
