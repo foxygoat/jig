@@ -15,7 +15,7 @@ import (
 var version = "v0.0.0"
 
 type config struct {
-	Address  string           `help:"hostname:port" default:"localhost:9090"`
+	Address  string           `help:"hostname:port" default:"localhost:8080"`
 	Stream   string           `short:"s" enum:"none,client,server,bidi" default:"none" help:"Stream requests/responses"`
 	Messages []string         `arg:"" help:"message to send" default:"Hello 🌏"`
 	Version  kong.VersionFlag `short:"V" help:"Print version information" group:"Other:"`
