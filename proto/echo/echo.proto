@@ -1,7 +1,7 @@
 syntax = "proto3";
 
 package echo;
-option go_package = "foxygo.at/pony/pb/echo";
+option go_package = "foxygo.at/jig/pb/echo";
 import "google/api/annotations.proto";
 
 // Echo service.

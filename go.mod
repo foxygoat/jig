@@ -1,4 +1,4 @@
-module foxygo.at/pony
+module foxygo.at/jig
 
 go 1.17
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"foxygo.at/pony/serve"
+	"foxygo.at/jig/serve"
 	"github.com/alecthomas/kong"
 )
 
