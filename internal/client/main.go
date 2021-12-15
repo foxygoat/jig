@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"foxygo.at/pony/pb/echo"
+	"foxygo.at/jig/pb/echo"
 	"github.com/alecthomas/kong"
 	"google.golang.org/grpc"
 )

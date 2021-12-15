@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"foxygo.at/pony/pb/echo"
+	"foxygo.at/jig/pb/echo"
 )
 
 type server struct {

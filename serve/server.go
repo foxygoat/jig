@@ -1,4 +1,4 @@
-// Package serve implements the "pony serve" command, serving GRPC services
+// Package serve implements the "jig serve" command, serving GRPC services
 // defined in a protoset file using the jsonnet contained in a method directory.
 package serve
 
