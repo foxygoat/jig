@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/alecthomas/kong v0.2.19
+	github.com/google/go-jsonnet v0.17.0
 	github.com/stretchr/testify v1.7.0
 	google.golang.org/genproto v0.0.0-20211129164237-f09f9a12af12
 	google.golang.org/grpc v1.42.0

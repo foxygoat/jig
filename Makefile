@@ -12,7 +12,7 @@ all: build test check-coverage lint lint-protos ## build, test, check coverage a
 
 ci: clean check-uptodate all  ## Full clean build and up-to-date checks as run on CI
 
-check-uptodate: protos
+check-uptodate: protos pb
 	test -z "$$(git status --porcelain)"
 
 clean::  ## Remove generated files
@@ -22,7 +22,7 @@ clean::  ## Remove generated files
 
 # --- Build --------------------------------------------------------------------
 GO_LDFLAGS = -X main.version=$(VERSION)
-CMDS = . ./internal/client ./internal/server ./internal/dynamicserver
+CMDS = . ./internal/client ./internal/server
 
 build: | $(O)  ## Build reflect binaries
 	go build -o $(O) -ldflags='$(GO_LDFLAGS)' $(CMDS)
