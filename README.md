@@ -70,6 +70,24 @@ JSON:
         stream: [ {response1}, {response2}, ... ]
     }
 
+A [gRPC status] can be returned in the `status` field:
+
+    function(input) {
+        status: {
+            code: 3,
+            message: 'Field "foo" failed validation: 0 < foo < 10',
+            details: [
+                {
+                    '@type': 'type.googleapis.com/google.protobuf.Duration',
+                    value: '15.2s',
+                },
+            ],
+        },
+    }
+
+If a result has a `status` field, it must not have a `response` or `stream`
+field.
+
 The response can reference fields of the input using regular jsonnet references.
 See the [testdata samples](./testdata).
 
@@ -81,6 +99,7 @@ To serve these jsonnet methods, run:
     jig serve --proto-set=service.pb --method-dir=dir
 
 
+[gRPC status]: https://www.grpc.io/docs/guides/error/
 [protojson]: https://developers.google.com/protocol-buffers/docs/proto3#json
 
 

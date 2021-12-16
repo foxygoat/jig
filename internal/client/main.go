@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"foxygo.at/jig/pb/echo"
 	"github.com/alecthomas/kong"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/status"
 )
 
 var version = "v0.0.0"
@@ -39,15 +41,15 @@ func run(cfg *config) error {
 	client := echo.NewEchoServiceClient(conn)
 	switch cfg.Stream {
 	case "none":
-		return runUnary(client, cfg)
+		err = runUnary(client, cfg)
 	case "client":
-		return runClientStream(client, cfg)
+		err = runClientStream(client, cfg)
 	case "server":
-		return runServerStream(client, cfg)
+		err = runServerStream(client, cfg)
 	case "bidi":
-		return runBiDiStream(client, cfg)
+		err = runBiDiStream(client, cfg)
 	}
-	return nil
+	return statusWithDetails(err)
 }
 
 func runUnary(client echo.EchoServiceClient, cfg *config) error {
@@ -127,4 +129,28 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 		fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
 	}
 	return nil
+}
+
+func statusWithDetails(err error) error {
+	if st, ok := status.FromError(err); ok {
+		return detailStatusErr{st}
+	}
+	return err
+}
+
+type detailStatusErr struct {
+	status *status.Status
+}
+
+func (dst detailStatusErr) Error() string {
+	details := dst.status.Details()
+	if len(details) == 0 {
+		return dst.status.Err().Error()
+	}
+	lines := make([]string, 0, len(details)+1)
+	lines = append(lines, dst.status.Err().Error())
+	for _, d := range details {
+		lines = append(lines, fmt.Sprintf("%v", d))
+	}
+	return strings.Join(lines, "\n")
 }

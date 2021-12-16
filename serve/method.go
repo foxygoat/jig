@@ -8,6 +8,8 @@ import (
 	"path"
 
 	"github.com/google/go-jsonnet"
+	statuspb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -130,6 +132,7 @@ type request struct {
 type response struct {
 	Response json.RawMessage   `json:"response"`
 	Stream   []json.RawMessage `json:"stream"`
+	Status   json.RawMessage   `json:"status"`
 }
 
 func makeInputJSON(msg *dynamicpb.Message) (string, error) {
@@ -170,6 +173,17 @@ func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) ([]*dyna
 	v := response{}
 	if err := json.Unmarshal([]byte(output), &v); err != nil {
 		return nil, err
+	}
+
+	if len(v.Status) > 0 {
+		if len(v.Stream) > 0 || v.Response != nil {
+			return nil, errors.New("method cannot return a response/stream and status")
+		}
+		var s statuspb.Status
+		if err := protojson.Unmarshal(v.Status, &s); err != nil {
+			return nil, err
+		}
+		return nil, status.ErrorProto(&s)
 	}
 
 	// Validate result. A streaming server can return a nil slice.
