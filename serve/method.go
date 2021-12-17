@@ -9,6 +9,8 @@ import (
 
 	"github.com/google/go-jsonnet"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -18,11 +20,6 @@ import (
 type method struct {
 	desc     protoreflect.MethodDescriptor
 	filename string
-}
-
-type serverStream interface {
-	SendMsg(m interface{}) error
-	RecvMsg(m interface{}) error
 }
 
 func newMethod(md protoreflect.MethodDescriptor, methodDir string) method {
@@ -38,21 +35,22 @@ func (m method) fullMethod() string {
 	return fmt.Sprintf("/%s.%s/%s", m.desc.ParentFile().Package(), m.desc.Parent().Name(), m.desc.Name())
 }
 
-func (m method) call(ss serverStream) error {
+func (m method) call(ss grpc.ServerStream) error {
 	if m.desc.IsStreamingClient() {
 		return m.streamingClientCall(ss)
 	}
 	return m.unaryClientCall(ss)
 }
 
-func (m method) unaryClientCall(ss serverStream) error {
+func (m method) unaryClientCall(ss grpc.ServerStream) error {
 	// Handle unary client (request), with either unary or streaming server (response).
+	md, _ := metadata.FromIncomingContext(ss.Context())
 	req := dynamicpb.NewMessage(m.desc.Input())
 	if err := ss.RecvMsg(req); err != nil {
 		return err
 	}
 
-	input, err := makeInputJSON(req)
+	input, err := makeInputJSON(req, md)
 	if err != nil {
 		return err
 	}
@@ -60,12 +58,13 @@ func (m method) unaryClientCall(ss serverStream) error {
 	return m.evalJsonnet(input, ss)
 }
 
-func (m method) streamingClientCall(ss serverStream) error {
+func (m method) streamingClientCall(ss grpc.ServerStream) error {
+	md, _ := metadata.FromIncomingContext(ss.Context())
 	var stream []*dynamicpb.Message
 	for {
 		msg := dynamicpb.NewMessage(m.desc.Input())
 		if err := ss.RecvMsg(msg); err != nil {
-			if errors.Is(err, io.EOF) {
+			if !errors.Is(err, io.EOF) {
 				return err
 			}
 			break
@@ -79,7 +78,7 @@ func (m method) streamingClientCall(ss serverStream) error {
 
 		// For bidirectional streaming, we call jsonnet once for each message
 		// on the input stream and stream out the results.
-		input, err := makeInputJSON(msg)
+		input, err := makeInputJSON(msg, md)
 		if err != nil {
 			return err
 		}
@@ -88,22 +87,23 @@ func (m method) streamingClientCall(ss serverStream) error {
 		}
 	}
 
-	// For bidirectional streaming, call jsonnet one last time with a null
-	// request so it knows end-of-stream has been reached.
-	input := "{request: null}"
-
-	if !m.desc.IsStreamingServer() {
-		var err error
-		input, err = makeStreamingInputJSON(stream)
-		if err != nil {
-			return err
-		}
+	var input string
+	var err error
+	if m.desc.IsStreamingServer() {
+		// For bidirectional streaming, call jsonnet one last time with a null
+		// request so it knows end-of-stream has been reached.
+		input, err = makeInputJSON(nil, md)
+	} else {
+		input, err = makeStreamingInputJSON(stream, md)
+	}
+	if err != nil {
+		return err
 	}
 
 	return m.evalJsonnet(input, ss)
 }
 
-func (m method) evalJsonnet(input string, ss serverStream) error {
+func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
 	vm := jsonnet.MakeVM()
 	// TODO(camh): Add jsonnext.Importer
 	vm.TLACode("input", input)
@@ -112,11 +112,22 @@ func (m method) evalJsonnet(input string, ss serverStream) error {
 		return err
 	}
 
-	stream, err := parseOutputJSON(output, m.desc)
+	result, err := parseOutputJSON(output, m.desc)
 	if err != nil {
 		return err
 	}
-	for _, resp := range stream {
+	if len(result.header) > 0 {
+		if err := ss.SetHeader(result.header); err != nil {
+			return err
+		}
+	}
+	if len(result.trailer) > 0 {
+		ss.SetTrailer(result.trailer)
+	}
+	if result.status != nil {
+		return status.ErrorProto(result.status)
+	}
+	for _, resp := range result.stream {
 		if err := ss.SendMsg(resp); err != nil {
 			return err
 		}
@@ -125,23 +136,36 @@ func (m method) evalJsonnet(input string, ss serverStream) error {
 }
 
 type request struct {
+	Header  metadata.MD       `json:"header"`
 	Request json.RawMessage   `json:"request,omitempty"`
 	Stream  []json.RawMessage `json:"stream,omitempty"`
 }
 
 type response struct {
+	Header   metadata.MD       `json:"header"`
+	Trailer  metadata.MD       `json:"trailer"`
 	Response json.RawMessage   `json:"response"`
 	Stream   []json.RawMessage `json:"stream"`
 	Status   json.RawMessage   `json:"status"`
 }
 
-func makeInputJSON(msg *dynamicpb.Message) (string, error) {
-	mo := protojson.MarshalOptions{EmitUnpopulated: true}
-	b, err := mo.Marshal(msg)
-	if err != nil {
-		return "", err
+type methodResult struct {
+	header  metadata.MD
+	trailer metadata.MD
+	stream  []*dynamicpb.Message
+	status  *statuspb.Status
+}
+
+func makeInputJSON(msg *dynamicpb.Message, md metadata.MD) (string, error) {
+	v := request{Header: md, Request: []byte("null")}
+	if msg != nil {
+		mo := protojson.MarshalOptions{EmitUnpopulated: true}
+		b, err := mo.Marshal(msg)
+		if err != nil {
+			return "", err
+		}
+		v.Request = b
 	}
-	v := request{Request: b}
 	input, err := json.Marshal(&v)
 	if err != nil {
 		return "", err
@@ -150,9 +174,9 @@ func makeInputJSON(msg *dynamicpb.Message) (string, error) {
 	return string(input), nil
 }
 
-func makeStreamingInputJSON(stream []*dynamicpb.Message) (string, error) {
+func makeStreamingInputJSON(stream []*dynamicpb.Message, md metadata.MD) (string, error) {
 	mo := protojson.MarshalOptions{EmitUnpopulated: true}
-	v := request{Stream: make([]json.RawMessage, 0, len(stream))}
+	v := request{Header: md, Stream: make([]json.RawMessage, 0, len(stream))}
 	for _, msg := range stream {
 		b, err := mo.Marshal(msg)
 		if err != nil {
@@ -169,10 +193,15 @@ func makeStreamingInputJSON(stream []*dynamicpb.Message) (string, error) {
 	return string(input), nil
 }
 
-func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) ([]*dynamicpb.Message, error) {
+func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) (*methodResult, error) {
 	v := response{}
 	if err := json.Unmarshal([]byte(output), &v); err != nil {
 		return nil, err
+	}
+
+	result := &methodResult{
+		header:  v.Header,
+		trailer: v.Trailer,
 	}
 
 	if len(v.Status) > 0 {
@@ -183,7 +212,8 @@ func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) ([]*dyna
 		if err := protojson.Unmarshal(v.Status, &s); err != nil {
 			return nil, err
 		}
-		return nil, status.ErrorProto(&s)
+		result.status = &s
+		return result, nil
 	}
 
 	// Validate result. A streaming server can return a nil slice.
@@ -201,13 +231,13 @@ func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) ([]*dyna
 		v.Stream = append(v.Stream, v.Response)
 	}
 
-	stream := make([]*dynamicpb.Message, 0, len(v.Stream))
+	result.stream = make([]*dynamicpb.Message, 0, len(v.Stream))
 	for _, jsonMsg := range v.Stream {
 		msg := dynamicpb.NewMessage(desc.Output())
 		if err := protojson.Unmarshal(jsonMsg, msg); err != nil {
 			return nil, err
 		}
-		stream = append(stream, msg)
+		result.stream = append(result.stream, msg)
 	}
-	return stream, nil
+	return result, nil
 }
