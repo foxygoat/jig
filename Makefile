@@ -12,7 +12,7 @@ all: build test check-coverage lint lint-protos ## build, test, check coverage a
 
 ci: clean check-uptodate all  ## Full clean build and up-to-date checks as run on CI
 
-check-uptodate: protos pb
+check-uptodate: protos pb tidy
 	test -z "$$(git status --porcelain)"
 
 clean::  ## Remove generated files
@@ -30,7 +30,10 @@ build: | $(O)  ## Build reflect binaries
 install:  ## Build and install binaries in $GOBIN
 	go install -ldflags='$(GO_LDFLAGS)' $(CMDS)
 
-.PHONY: build install
+tidy:  ## Tidy go modules with "go mod tidy"
+	go mod tidy
+
+.PHONY: build install tidy
 
 # --- Test ---------------------------------------------------------------------
 COVERFILE = $(O)/coverage.txt
