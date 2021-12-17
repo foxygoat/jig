@@ -65,7 +65,7 @@ func (m method) streamingClientCall(ss serverStream) error {
 	for {
 		msg := dynamicpb.NewMessage(m.desc.Input())
 		if err := ss.RecvMsg(msg); err != nil {
-			if errors.Is(err, io.EOF) {
+			if !errors.Is(err, io.EOF) {
 				return err
 			}
 			break
