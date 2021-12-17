@@ -124,7 +124,7 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 		resp, err := stream.Recv()
 		if err != nil {
 			// EOF is an error here, because we expect a response
-			return nil
+			return err
 		}
 		fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
 	}
