@@ -132,7 +132,7 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 }
 
 func statusWithDetails(err error) error {
-	if st, ok := status.FromError(err); ok {
+	if st, ok := status.FromError(err); ok && st != nil {
 		return detailStatusErr{st}
 	}
 	return err
