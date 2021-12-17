@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-jsonnet"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -18,11 +19,6 @@ import (
 type method struct {
 	desc     protoreflect.MethodDescriptor
 	filename string
-}
-
-type serverStream interface {
-	SendMsg(m interface{}) error
-	RecvMsg(m interface{}) error
 }
 
 func newMethod(md protoreflect.MethodDescriptor, methodDir string) method {
@@ -38,14 +34,14 @@ func (m method) fullMethod() string {
 	return fmt.Sprintf("/%s.%s/%s", m.desc.ParentFile().Package(), m.desc.Parent().Name(), m.desc.Name())
 }
 
-func (m method) call(ss serverStream) error {
+func (m method) call(ss grpc.ServerStream) error {
 	if m.desc.IsStreamingClient() {
 		return m.streamingClientCall(ss)
 	}
 	return m.unaryClientCall(ss)
 }
 
-func (m method) unaryClientCall(ss serverStream) error {
+func (m method) unaryClientCall(ss grpc.ServerStream) error {
 	// Handle unary client (request), with either unary or streaming server (response).
 	req := dynamicpb.NewMessage(m.desc.Input())
 	if err := ss.RecvMsg(req); err != nil {
@@ -60,7 +56,7 @@ func (m method) unaryClientCall(ss serverStream) error {
 	return m.evalJsonnet(input, ss)
 }
 
-func (m method) streamingClientCall(ss serverStream) error {
+func (m method) streamingClientCall(ss grpc.ServerStream) error {
 	var stream []*dynamicpb.Message
 	for {
 		msg := dynamicpb.NewMessage(m.desc.Input())
@@ -103,7 +99,7 @@ func (m method) streamingClientCall(ss serverStream) error {
 	return m.evalJsonnet(input, ss)
 }
 
-func (m method) evalJsonnet(input string, ss serverStream) error {
+func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
 	vm := jsonnet.MakeVM()
 	// TODO(camh): Add jsonnext.Importer
 	vm.TLACode("input", input)
