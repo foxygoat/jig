@@ -36,10 +36,14 @@ func (m method) fullMethod() string {
 }
 
 func (m method) call(ss grpc.ServerStream) error {
-	if m.desc.IsStreamingClient() {
+	switch {
+	case m.desc.IsStreamingClient() && m.desc.IsStreamingServer():
+		return m.streamingBidiCall(ss)
+	case m.desc.IsStreamingClient():
 		return m.streamingClientCall(ss)
+	default: // handle both unary and streaming-server
+		return m.unaryClientCall(ss)
 	}
-	return m.unaryClientCall(ss)
 }
 
 func (m method) unaryClientCall(ss grpc.ServerStream) error {
@@ -69,11 +73,26 @@ func (m method) streamingClientCall(ss grpc.ServerStream) error {
 			}
 			break
 		}
-		if !m.desc.IsStreamingServer() {
-			// For client-streaming, we just collect all the messages on
-			// the input stream to pass once to jsonnet.
-			stream = append(stream, msg)
-			continue
+		stream = append(stream, msg)
+	}
+
+	input, err := makeStreamingInputJSON(stream, md)
+	if err != nil {
+		return err
+	}
+
+	return m.evalJsonnet(input, ss)
+}
+
+func (m method) streamingBidiCall(ss grpc.ServerStream) error {
+	md, _ := metadata.FromIncomingContext(ss.Context())
+	for {
+		msg := dynamicpb.NewMessage(m.desc.Input())
+		if err := ss.RecvMsg(msg); err != nil {
+			if !errors.Is(err, io.EOF) {
+				return err
+			}
+			break
 		}
 
 		// For bidirectional streaming, we call jsonnet once for each message
@@ -86,21 +105,7 @@ func (m method) streamingClientCall(ss grpc.ServerStream) error {
 			return err
 		}
 	}
-
-	var input string
-	var err error
-	if m.desc.IsStreamingServer() {
-		// For bidirectional streaming, call jsonnet one last time with a null
-		// request so it knows end-of-stream has been reached.
-		input, err = makeInputJSON(nil, md)
-	} else {
-		input, err = makeStreamingInputJSON(stream, md)
-	}
-	if err != nil {
-		return err
-	}
-
-	return m.evalJsonnet(input, ss)
+	return nil
 }
 
 func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
