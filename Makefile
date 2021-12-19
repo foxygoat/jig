@@ -22,7 +22,7 @@ clean::  ## Remove generated files
 
 # --- Build --------------------------------------------------------------------
 GO_LDFLAGS = -X main.version=$(VERSION)
-CMDS = . ./internal/client ./internal/server
+CMDS = . ./internal/cmd/client ./internal/cmd/server
 
 build: | $(O)  ## Build reflect binaries
 	go build -o $(O) -ldflags='$(GO_LDFLAGS)' $(CMDS)
