@@ -1,5 +1,9 @@
 function(input)
-  if input.request != null && input.request.firstName == 'Bart' then
+  if input.request.firstName != 'Bart' then
+    {
+      stream: [{ greeting: '💃 jig [bidi]: Hello ' + input.request.firstName }],
+    }
+  else // input.request.firstName == 'Bart' then
     {
       status: {
         code: 3,  // InvalidArgument
@@ -10,13 +14,4 @@ function(input)
       header: {
         eat: ['his', 'shorts'],
       },
-    }
-  else
-    {
-      local response =
-        if input.request == null then
-          []
-        else
-          [{ greeting: '💃 jig [bidi]: Hello ' + input.request.firstName }],
-      stream: response,
     }
