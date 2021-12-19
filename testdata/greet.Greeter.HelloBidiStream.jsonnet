@@ -1,9 +1,9 @@
 function(input)
-  if input.request != null && input.request.message == 'Bart' then
+  if input.request != null && input.request.firstName == 'Bart' then
     {
       status: {
-        code: 3,
-        message: 'eat my shorts',
+        code: 3,  // InvalidArgument
+        message: '💃 jig [bidi]: eat my shorts',
       },
       // Without this header, the content-type is sent in the trailer
       // as there is nothing in the body. This is a "trailer-only" response.
@@ -17,6 +17,6 @@ function(input)
         if input.request == null then
           []
         else
-          [{ response: 'Hello ' + input.request.message }],
+          [{ greeting: '💃 jig [bidi]: Hello ' + input.request.firstName }],
       stream: response,
     }

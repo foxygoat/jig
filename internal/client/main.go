@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"foxygo.at/jig/pb/echo"
+	"foxygo.at/jig/pb/greet"
 	"github.com/alecthomas/kong"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -19,10 +19,10 @@ import (
 var version = "v0.0.0"
 
 type config struct {
-	Address  string           `help:"hostname:port" default:"localhost:8080"`
-	Stream   string           `short:"s" enum:"none,client,server,bidi" default:"none" help:"Stream requests/responses"`
-	Messages []string         `arg:"" help:"message to send" default:"Hello 🌏"`
-	Version  kong.VersionFlag `short:"V" help:"Print version information" group:"Other:"`
+	Address string           `help:"hostname:port" default:"localhost:8080"`
+	Stream  string           `short:"s" enum:"none,client,server,bidi" default:"none" help:"Stream requests/responses"`
+	Names   []string         `arg:"" help:"Name to greet" default:"🌏"`
+	Version kong.VersionFlag `short:"V" help:"Print version information" group:"Other:"`
 
 	out io.Writer
 }
@@ -40,7 +40,7 @@ func run(cfg *config) error {
 		return err
 	}
 	defer conn.Close()
-	client := echo.NewEchoServiceClient(conn)
+	client := greet.NewGreeterClient(conn)
 	switch cfg.Stream {
 	case "none":
 		err = runUnary(client, cfg)
@@ -54,28 +54,28 @@ func run(cfg *config) error {
 	return statusWithDetails(err)
 }
 
-func runUnary(client echo.EchoServiceClient, cfg *config) error {
-	if len(cfg.Messages) > 1 {
-		return errors.New("Only one message allowed for unary client requests")
+func runUnary(client greet.GreeterClient, cfg *config) error {
+	if len(cfg.Names) > 1 {
+		return errors.New("Only one name allowed for unary client requests")
 	}
 	var header, trailer metadata.MD
-	req := &echo.HelloRequest{Message: cfg.Messages[0]}
+	req := &greet.HelloRequest{FirstName: cfg.Names[0]}
 	resp, err := client.Hello(context.Background(), req, grpc.Header(&header), grpc.Trailer(&trailer))
 	fmt.Fprintf(cfg.out, "Header: %v\n", header)
 	if err == nil {
-		_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+		_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 	}
 	fmt.Fprintf(cfg.out, "Trailer: %v\n", trailer)
 	return err
 }
 
-func runClientStream(client echo.EchoServiceClient, cfg *config) error {
+func runClientStream(client greet.GreeterClient, cfg *config) error {
 	stream, err := client.HelloClientStream(context.Background())
 	if err != nil {
 		return err
 	}
-	for _, msg := range cfg.Messages {
-		if err := stream.Send(&echo.HelloRequest{Message: msg}); err != nil {
+	for _, name := range cfg.Names {
+		if err := stream.Send(&greet.HelloRequest{FirstName: name}); err != nil {
 			return err
 		}
 	}
@@ -90,15 +90,15 @@ func runClientStream(client echo.EchoServiceClient, cfg *config) error {
 	if rerr != nil {
 		return rerr
 	}
-	_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+	_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 	return err
 }
 
-func runServerStream(client echo.EchoServiceClient, cfg *config) error {
-	if len(cfg.Messages) > 1 {
-		return errors.New("Only one message allowed for unary client requests")
+func runServerStream(client greet.GreeterClient, cfg *config) error {
+	if len(cfg.Names) > 1 {
+		return errors.New("Only one name allowed for unary client requests")
 	}
-	req := &echo.HelloRequest{Message: cfg.Messages[0]}
+	req := &greet.HelloRequest{FirstName: cfg.Names[0]}
 	stream, err := client.HelloServerStream(context.Background(), req)
 	if err != nil {
 		return err
@@ -119,7 +119,7 @@ func runServerStream(client echo.EchoServiceClient, cfg *config) error {
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+		_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 		if err != nil {
 			return err
 		}
@@ -127,7 +127,7 @@ func runServerStream(client echo.EchoServiceClient, cfg *config) error {
 	return nil
 }
 
-func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
+func runBiDiStream(client greet.GreeterClient, cfg *config) error {
 	errgrp, ctx := errgroup.WithContext(context.Background())
 
 	stream, err := client.HelloBiDiStream(ctx)
@@ -137,8 +137,8 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 
 	// concurrently run each direction of the stream.
 	errgrp.Go(func() error {
-		for _, msg := range cfg.Messages {
-			req := &echo.HelloRequest{Message: msg}
+		for _, name := range cfg.Names {
+			req := &greet.HelloRequest{FirstName: name}
 			if err := stream.Send(req); err != nil {
 				return err
 			}
@@ -160,7 +160,7 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+			fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 		}
 	})
 

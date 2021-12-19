@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"foxygo.at/jig/pb/echo"
+	"foxygo.at/jig/pb/greet"
 	"github.com/alecthomas/kong"
 	"google.golang.org/grpc"
 )
@@ -30,6 +30,6 @@ func run(addr string) error {
 		return err
 	}
 	grpcServer := grpc.NewServer()
-	echo.RegisterEchoServiceServer(grpcServer, newServer())
+	greet.RegisterGreeterServer(grpcServer, newServer())
 	return grpcServer.Serve(lis)
 }
