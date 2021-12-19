@@ -1,33 +1,33 @@
 syntax = "proto3";
 
-package echo;
-option go_package = "foxygo.at/jig/pb/echo";
+package greet;
+option go_package = "foxygo.at/jig/pb/greet";
 import "google/api/annotations.proto";
 
-// Echo service.
-service EchoService {
+// Greeter service.
+service Greeter {
   // Hello greets.
   rpc Hello (HelloRequest) returns (HelloResponse) {
-    option (google.api.http) = { post:"/api/echo/hello" body:"*" };
+    option (google.api.http) = { post:"/api/greet/hello" body:"*" };
   };
   // HelloClientStream greets everyone at once.
   rpc HelloClientStream (stream HelloRequest) returns (HelloResponse) {
-    option (google.api.http) = { post:"/api/echo/clientstream" body:"*" };
+    option (google.api.http) = { post:"/api/greet/clientstream" body:"*" };
   }
   // HelloServerStream greets repeatedly.
   rpc HelloServerStream (HelloRequest) returns (stream HelloResponse) {
-    option (google.api.http) = { post:"/api/echo/serverstream" body:"*" };
+    option (google.api.http) = { post:"/api/greet/serverstream" body:"*" };
   };
   // HelloBiDiStream greets everyone individually.
   rpc HelloBiDiStream (stream HelloRequest) returns (stream HelloResponse) {
-    option (google.api.http) = { post:"/api/echo/bidistream" body:"*" };
+    option (google.api.http) = { post:"/api/greet/bidistream" body:"*" };
   };
 }
 
 message HelloRequest {
-  string message = 1;
+  string first_name = 1;
 }
 
 message HelloResponse {
-  string response = 1;
+  string greeting = 1;
 }

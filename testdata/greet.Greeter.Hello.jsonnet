@@ -1,5 +1,5 @@
 function(input)
-  if input.request.message == 'Bart' then
+  if input.request.firstName == 'Bart' then
     {
       header: {
         eat: ['my', 'shorts'],
@@ -10,7 +10,7 @@ function(input)
       },
       status: {
         code: 3,
-        message: 'eat my shorts',
+        message: '💃 jig [unary]: eat my shorts',
         details: [
           {
             '@type': 'type.googleapis.com/google.protobuf.Duration',
@@ -22,6 +22,6 @@ function(input)
   else
     {
       response: {
-        response: 'Hello ' + input.request.message,
+        greeting: '💃 jig [unary]: Hello ' + input.request.firstName,
       },
     }
