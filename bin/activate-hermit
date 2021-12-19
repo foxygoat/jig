@@ -3,7 +3,7 @@
 # You cannot run it directly
 
 if [ "${BASH_SOURCE-}" = "$0" ]; then
-  echo "You must source this script: \$ source $0" >&2
+  greet "You must source this script: \$ source $0" >&2
   exit 33
 fi
 
@@ -15,5 +15,5 @@ if "${BIN_DIR}/hermit" noop > /dev/null; then
       hash -r 2>/dev/null
     fi
 
-    echo "Hermit environment $("${HERMIT_ENV}"/bin/hermit env HERMIT_ENV) activated"
+    greet "Hermit environment $("${HERMIT_ENV}"/bin/hermit env HERMIT_ENV) activated"
 fi

@@ -7,21 +7,21 @@ import (
 	"io"
 	"strings"
 
-	"foxygo.at/jig/pb/echo"
+	"foxygo.at/jig/pb/greet"
 )
 
 type server struct {
-	echo.UnimplementedEchoServiceServer
+	greet.UnimplementedGreeterServer
 }
 
-func (*server) Hello(_ context.Context, req *echo.HelloRequest) (*echo.HelloResponse, error) {
-	resp := &echo.HelloResponse{Response: fmt.Sprintf("%s ... %s", req.Message, req.Message)}
+func (*server) Hello(_ context.Context, req *greet.HelloRequest) (*greet.HelloResponse, error) {
+	resp := &greet.HelloResponse{Greeting: fmt.Sprintf("%s ... %s", req.FirstName, req.FirstName)}
 	return resp, nil
 }
 
-func (*server) HelloServerStream(req *echo.HelloRequest, stream echo.EchoService_HelloServerStreamServer) error {
+func (*server) HelloServerStream(req *greet.HelloRequest, stream greet.Greeter_HelloServerStreamServer) error {
 	for i := 0; i < 10; i++ {
-		err := stream.Send(&echo.HelloResponse{Response: req.Message})
+		err := stream.Send(&greet.HelloResponse{Greeting: req.FirstName})
 		if err != nil {
 			return err
 		}
@@ -29,7 +29,7 @@ func (*server) HelloServerStream(req *echo.HelloRequest, stream echo.EchoService
 	return nil
 }
 
-func (*server) HelloClientStream(stream echo.EchoService_HelloClientStreamServer) error {
+func (*server) HelloClientStream(stream greet.Greeter_HelloClientStreamServer) error {
 	var messages []string
 	for {
 		req, err := stream.Recv()
@@ -39,13 +39,13 @@ func (*server) HelloClientStream(stream echo.EchoService_HelloClientStreamServer
 		if err != nil {
 			return err
 		}
-		messages = append(messages, req.Message)
+		messages = append(messages, req.FirstName)
 	}
-	resp := &echo.HelloResponse{Response: "Hello " + strings.Join(messages, " and ")}
+	resp := &greet.HelloResponse{Greeting: "Hello " + strings.Join(messages, " and ")}
 	return stream.SendAndClose(resp)
 }
 
-func (*server) HelloBiDiStream(stream echo.EchoService_HelloBiDiStreamServer) error {
+func (*server) HelloBiDiStream(stream greet.Greeter_HelloBiDiStreamServer) error {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {
@@ -54,13 +54,13 @@ func (*server) HelloBiDiStream(stream echo.EchoService_HelloBiDiStreamServer) er
 		if err != nil {
 			return err
 		}
-		if err := stream.Send(&echo.HelloResponse{Response: "Hello " + req.Message}); err != nil {
+		if err := stream.Send(&greet.HelloResponse{Greeting: "Hello " + req.FirstName}); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func newServer() echo.EchoServiceServer {
+func newServer() greet.GreeterServer {
 	return &server{}
 }

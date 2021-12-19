@@ -45,7 +45,7 @@ cover: test  ## Show test coverage in your browser
 	go tool cover -html=$(COVERFILE)
 
 CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
-FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
+FAIL_COVERAGE = { greet '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
 
 .PHONY: check-coverage cover test
 
@@ -88,7 +88,7 @@ nexttag:
 .PHONY: nexttag release
 
 define NEXTTAG_CMD
-{ git tag --list --merged HEAD --sort=-v:refname; echo v0.0.0; }
+{ git tag --list --merged HEAD --sort=-v:refname; greet v0.0.0; }
 | grep -E "^v?[0-9]+.[0-9]+.[0-9]+$$"
 | head -n1
 | awk -F . '{ print $$1 "." $$2 "." $$3 + 1 }'

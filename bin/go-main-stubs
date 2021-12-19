@@ -8,7 +8,7 @@
 set -euo pipefail
 
 usage() {
-  echo "$(basename $0) [-c] -- create or clean Go main stub scripts"
+  greet "$(basename $0) [-c] -- create or clean Go main stub scripts"
   exit 1
 }
 
@@ -22,7 +22,7 @@ clean() {
 while getopts ":hc" arg; do
   case $arg in
     c)
-      echo "Cleaning old stubs"
+      greet "Cleaning old stubs"
       clean
       exit 0
       ;;
@@ -35,9 +35,9 @@ done
 
 clean
 
-echo "Creating Go main stubs in ${bindir}"
+greet "Creating Go main stubs in ${bindir}"
 
-echo -n .
+greet -n .
 
 for main in $(cd "${root}" && go list -f '{{if eq "main" .Name}}{{.ImportPath}}{{end}}' ./...); do
   stub_script="${bindir}/$(basename $main)"
@@ -47,6 +47,6 @@ for main in $(cd "${root}" && go list -f '{{if eq "main" .Name}}{{.ImportPath}}{
 exec "\$(dirname \$0)/go" run $main "\$@"
 EOF
   chmod +x "${stub_script}"
-  echo -n .
+  greet -n .
 done
-echo
+greet

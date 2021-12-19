@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"foxygo.at/jig/pb/echo"
+	"foxygo.at/jig/pb/greet"
 	"github.com/alecthomas/kong"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -38,7 +38,7 @@ func run(cfg *config) error {
 		return err
 	}
 	defer conn.Close()
-	client := echo.NewEchoServiceClient(conn)
+	client := greet.NewGreeterClient(conn)
 	switch cfg.Stream {
 	case "none":
 		err = runUnary(client, cfg)
@@ -52,25 +52,25 @@ func run(cfg *config) error {
 	return statusWithDetails(err)
 }
 
-func runUnary(client echo.EchoServiceClient, cfg *config) error {
+func runUnary(client greet.GreeterClient, cfg *config) error {
 	if len(cfg.Messages) > 1 {
 		return errors.New("Only one message allowed for unary client requests")
 	}
-	resp, err := client.Hello(context.Background(), &echo.HelloRequest{Message: cfg.Messages[0]})
+	resp, err := client.Hello(context.Background(), &greet.HelloRequest{FirstName: cfg.Messages[0]})
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+	_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 	return err
 }
 
-func runClientStream(client echo.EchoServiceClient, cfg *config) error {
+func runClientStream(client greet.GreeterClient, cfg *config) error {
 	stream, err := client.HelloClientStream(context.Background())
 	if err != nil {
 		return err
 	}
 	for _, msg := range cfg.Messages {
-		if err := stream.Send(&echo.HelloRequest{Message: msg}); err != nil {
+		if err := stream.Send(&greet.HelloRequest{FirstName: msg}); err != nil {
 			return err
 		}
 	}
@@ -78,15 +78,15 @@ func runClientStream(client echo.EchoServiceClient, cfg *config) error {
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+	_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 	return err
 }
 
-func runServerStream(client echo.EchoServiceClient, cfg *config) error {
+func runServerStream(client greet.GreeterClient, cfg *config) error {
 	if len(cfg.Messages) > 1 {
 		return errors.New("Only one message allowed for unary client requests")
 	}
-	req := &echo.HelloRequest{Message: cfg.Messages[0]}
+	req := &greet.HelloRequest{FirstName: cfg.Messages[0]}
 	stream, err := client.HelloServerStream(context.Background(), req)
 	if err != nil {
 		return err
@@ -99,7 +99,7 @@ func runServerStream(client echo.EchoServiceClient, cfg *config) error {
 		if err != nil {
 			return err
 		}
-		_, err = fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+		_, err = fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 		if err != nil {
 			return err
 		}
@@ -107,17 +107,17 @@ func runServerStream(client echo.EchoServiceClient, cfg *config) error {
 	return nil
 }
 
-func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
+func runBiDiStream(client greet.GreeterClient, cfg *config) error {
 	stream, err := client.HelloBiDiStream(context.Background())
 	if err != nil {
 		return err
 	}
 	for _, msg := range cfg.Messages {
-		if err := stream.Send(&echo.HelloRequest{Message: msg}); err != nil {
+		if err := stream.Send(&greet.HelloRequest{FirstName: msg}); err != nil {
 			return err
 		}
 		// We don't need to run stream.Recv() in a separate goroutine like
-		// some bidi methods need as the echo service is synchronous. We
+		// some bidi methods need as the greet service is synchronous. We
 		// send one request, we get one response. For asynchronous bidi
 		// streaming methods, this Recv() would likely need to be done
 		// concurrently/asynchronously with the Send().
@@ -126,7 +126,7 @@ func runBiDiStream(client echo.EchoServiceClient, cfg *config) error {
 			// EOF is an error here, because we expect a response
 			return nil
 		}
-		fmt.Fprintf(cfg.out, "Response: %s\n", resp.Response)
+		fmt.Fprintf(cfg.out, "Greeting: %s\n", resp.Greeting)
 	}
 	return nil
 }
