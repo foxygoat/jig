@@ -45,7 +45,7 @@ func (*server) HelloClientStream(stream greet.Greeter_HelloClientStreamServer) e
 	return stream.SendAndClose(resp)
 }
 
-func (*server) HelloBiDiStream(stream greet.Greeter_HelloBiDiStreamServer) error {
+func (*server) HelloBidiStream(stream greet.Greeter_HelloBidiStreamServer) error {
 	for {
 		req, err := stream.Recv()
 		if errors.Is(err, io.EOF) {

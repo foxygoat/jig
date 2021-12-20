@@ -51,7 +51,7 @@ func (c *Client) Call(w io.Writer, names []string, streamType string) error {
 	case "server":
 		err = c.CallServerStream(w, names[0])
 	case "bidi":
-		err = c.CallBiDiStream(w, names)
+		err = c.CallBidiStream(w, names)
 	}
 	return StatusWithDetails(err)
 }
@@ -123,10 +123,10 @@ func (c *Client) CallServerStream(w io.Writer, name string) error {
 	return nil
 }
 
-func (c *Client) CallBiDiStream(w io.Writer, names []string) error {
+func (c *Client) CallBidiStream(w io.Writer, names []string) error {
 	errgrp, ctx := errgroup.WithContext(context.Background())
 
-	stream, err := c.greeterClient.HelloBiDiStream(ctx)
+	stream, err := c.greeterClient.HelloBidiStream(ctx)
 	if err != nil {
 		return err
 	}

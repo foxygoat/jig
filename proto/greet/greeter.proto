@@ -18,8 +18,8 @@ service Greeter {
   rpc HelloServerStream (HelloRequest) returns (stream HelloResponse) {
     option (google.api.http) = { post:"/api/greet/serverstream" body:"*" };
   };
-  // HelloBiDiStream greets everyone individually.
-  rpc HelloBiDiStream (stream HelloRequest) returns (stream HelloResponse) {
+  // HelloBidiStream greets everyone individually.
+  rpc HelloBidiStream (stream HelloRequest) returns (stream HelloResponse) {
     option (google.api.http) = { post:"/api/greet/bidistream" body:"*" };
   };
 }
