@@ -14,7 +14,7 @@ function(input)
         details: [
           {
             '@type': 'type.googleapis.com/google.protobuf.Duration',
-            value: '101.212s',
+            value: '42s',
           },
         ],
       },
