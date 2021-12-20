@@ -1,0 +1,1 @@
+../../../testdata/greet.Greeter.HelloServerStream.jsonnet
