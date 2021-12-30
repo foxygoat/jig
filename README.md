@@ -1,6 +1,6 @@
 # Jig
 
-Jig lets you use [jsonnet] to implement gRPC methods, e.g.
+Jig lets you use [jsonnet] to implement gRPC methods, e.g.:
 
     // Greeter.Hello
     function(input) {
@@ -28,6 +28,10 @@ Generate a FileDescriptorSet for the services to stub with:
 Put jsonnet method definitions together in a directory, each file named
 `<pkg>.<service>.<method>.jsonnet`. The jsonnet file is (re-)evaluated when the
 gRPC server receives a call to that method.
+
+You can generate skeleton jsonnet method definitions using `jig bones`:
+
+    jig bones --proto-set=service.pb --method-dir=dir
 
 Request protobuf messages are marshaled to JSON and passed to the jsonnet method
 definition function as the `input` parameter. If the method is a unary,
@@ -105,17 +109,19 @@ To serve these jsonnet methods, run:
 
 ## Playing
 
+### jig serve
+
 Build and start jig on the test data:
 
     . ./bin/activate-hermit
     make install
     jig serve --proto-set pb/greet/greeter.pb --method-dir testdata
 
-in a second terminal call it with
+in a second terminal call it with:
 
     client world
 
-To see streaming, call it with
+To see streaming, call it with:
 
     client --stream=server world
     client --stream=client you me world
@@ -124,10 +130,23 @@ To see streaming, call it with
 Experiment with the jsonnet method files in the [testdata](./testdata)
 directory.
 
-Alternatively there is a traditional generated gRPC server that the same client
-can interact with. Start with:
+Alternatively there is a traditional, generated gRPC server that the same client
+can interact with. Start it with:
 
     server
+
+### jig bones
+
+To get started on writing a jsonnet method definition, the `jig bones`
+subcommand generates a skeleton showing the input and output forms of a method.
+
+To see a message with all the different types of message fields:
+
+    jig bones --proto-set pb/exemplar/exemplar.pb
+
+To see the structure of the different method streaming types:
+
+    jig bones --proto-set pb/greet/greeter.pb
 
 
 ## Development
