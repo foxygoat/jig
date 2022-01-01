@@ -108,8 +108,8 @@ To serve these jsonnet methods, run:
 Build and start jig on the test data:
 
     . ./bin/activate-hermit
-    make install pb
-    jig serve --proto-set testdata/all.pb --method-dir testdata
+    make install
+    jig serve --proto-set pb/greet/greeter.pb --method-dir testdata
 
 in a second terminal call it with
 

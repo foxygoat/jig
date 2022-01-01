@@ -6,13 +6,13 @@ COVERAGE = 0
 VERSION ?= $(shell git describe --tags --dirty  --always)
 REPO_ROOT = $(shell git rev-parse --show-toplevel)
 
-all: build test check-coverage lint lint-protos ## build, test, check coverage and lint
+all: build test check-coverage lint lint-proto ## build, test, check coverage and lint
 	@if [ -e .git/rebase-merge ]; then git --no-pager log -1 --pretty='%h %s'; fi
 	@echo '$(COLOUR_GREEN)Success$(COLOUR_NORMAL)'
 
 ci: clean check-uptodate all  ## Full clean build and up-to-date checks as run on CI
 
-check-uptodate: protos pb tidy
+check-uptodate: proto tidy
 	test -z "$$(git status --porcelain)"
 
 clean::  ## Remove generated files
@@ -60,24 +60,26 @@ lint:  ## Lint go source code
 .PHONY: lint
 
 # --- Protos ---------------------------------------------------------------------
-PROTOFILES = $(shell find proto -name google -prune -o -regex '.*/[^_].*\.proto' -print)
+PROTOFILES = $(shell find proto -name google -prune -o -regex '.*/[^_].*\.proto' -print | LANG=C sort)
 
-lint-protos:  ## Lint *.proto files
+lint-proto:  ## Lint *.proto files
 	buf lint proto
 
-protos:  ## Generate Go pb and grpc binding for .proto files
-	protoc \
-		-I proto \
-		--go_out=paths=source_relative:pb \
-		--go-grpc_out=paths=source_relative:pb \
-		$(PROTOFILES)
+proto:  ## Generate Go pb and grpc bindings and FileDescritor set for .proto files
+	$(foreach PROTO,$(PROTOFILES),$(GENPROTO)$(nl))
 	gofumpt -w pb
 
+.PHONY: lint-proto proto
 
-pb:  ## Generate binary FileDescriptorSet output pb file
-	protoc -I proto -o testdata/all.pb --include_imports $(PROTOFILES)
-
-.PHONY: pb proto
+# GENPROTO is called with $(PROTO) set by "foreach" to the filename of the input proto.
+define GENPROTO
+	protoc \
+		-I proto \
+		--descriptor_set_out=$(PROTO:proto/%.proto=pb/%.pb) --include_imports \
+		--go_out=paths=source_relative:pb \
+		--go-grpc_out=paths=source_relative:pb \
+		$(PROTO)
+endef
 
 # --- Release -------------------------------------------------------------------
 release: nexttag  ## Tag and release binaries for different OS on GitHub release

@@ -14,7 +14,7 @@ func newTestServer(methodDir string) *TestServer {
 		Server{
 			Listen:    "localhost:0",
 			MethodDir: (filepath.Join("testdata", methodDir)),
-			ProtoSet:  "testdata/all.pb",
+			ProtoSet:  "testdata/greeter.pb",
 		},
 	}
 }
