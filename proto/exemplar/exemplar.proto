@@ -1,0 +1,79 @@
+// Sample protos for exemplar testing
+
+syntax = "proto3";
+
+package exemplar;
+
+option go_package = "foxygo.at/jig/pb/exemplar";
+
+service Exemplar {
+  rpc Sample(SampleRequest) returns (SampleResponse);
+}
+
+message SampleRequest {
+  string name = 1;
+}
+
+// A response that contains all types of values to see what form each takes
+// in a JSON/jsonnet message.
+message SampleResponse {
+  // Basic types
+  bool a_bool = 1;
+
+  int32    a_int32 = 2;
+  sint32   a_sint32 = 3;
+  sfixed32 a_sfixed32 = 4;
+  uint32   a_uint32 = 5;
+  fixed32  a_fixed32 = 6;
+
+  int64    a_int64 = 7;
+  sint64   a_sint64 = 8;
+  sfixed64 a_sfixed64 = 9;
+  uint64   a_uint64 = 10;
+  fixed64  a_fixed64 = 11;
+
+  float  a_float = 12;
+  double a_double = 13;
+
+  string a_string = 14;
+  bytes  a_bytes = 15;
+
+  // Enum
+  enum SampleEnum {
+    SAMPLE_ENUM_UNSPECIFIED = 0;
+    SAMPLE_ENUM_FIRST = 1;
+    SAMPLE_ENUM_SECOND = 2;
+  }
+  SampleEnum a_enum = 16;
+
+  // Message
+  message SampleMessage1 {
+    string field = 1;
+    repeated int32 repeat = 2;
+  }
+
+  message SampleMessage2 {
+    // buf:lint:ignore FIELD_LOWER_SNAKE_CASE
+    string weird_FieldName_1_ = 1;
+    repeated string a_string_list = 2;
+    repeated SampleMessage1 a_msg_list = 3;
+  }
+
+  SampleMessage1 a_message = 17;
+
+  // Maps
+  map<string, bool> a_map = 18;
+  map<string, SampleMessage2> a_deep_map = 19;
+
+  // Repeated
+  repeated int32 a_int_list = 20;
+  repeated SampleEnum a_enum_list = 21;
+  repeated SampleMessage1 a_message_list = 22;
+
+  // Oneof
+  oneof a_oneof {
+    string a_string_oneof = 23;
+    SampleEnum a_enum_oneof = 24;
+    SampleMessage1 a_message_oneof = 25;
+  }
+}
