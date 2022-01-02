@@ -28,7 +28,7 @@ func Generate(protoSet, methodDir string, force bool, targets []string) error {
 		return err == nil
 	})
 
-	return nil
+	return err
 }
 
 func loadProtoSet(protoSet string) (*protoregistry.Files, error) {

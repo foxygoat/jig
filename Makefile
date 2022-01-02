@@ -47,10 +47,14 @@ check-coverage: test  ## Check that test coverage meets the required level
 cover: test  ## Show test coverage in your browser
 	go tool cover -html=$(COVERFILE)
 
+golden: build  ## Generate golden test files
+	$(O)/jig bones --force --method-dir bones/testdata/golden/exemplar --proto-set pb/exemplar/exemplar.pb
+	$(O)/jig bones --force --method-dir bones/testdata/golden/greet --proto-set pb/greet/greeter.pb
+
 CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }
 
-.PHONY: check-coverage cover test
+.PHONY: check-coverage cover golden test
 
 # --- Lint ---------------------------------------------------------------------
 
