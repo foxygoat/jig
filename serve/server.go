@@ -7,12 +7,14 @@ import (
 	"net"
 	"os"
 
+	"foxygo.at/jig/reflection"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -24,6 +26,7 @@ type Server struct {
 	methods map[string]method
 	gs      *grpc.Server
 	lis     net.Listener
+	files   *protoregistry.Files
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
@@ -38,6 +41,8 @@ func (s *Server) setup() error {
 		grpc.StreamInterceptor(s.intercept),
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
+
+	reflection.NewService(s.files).Register(s.gs)
 
 	s.lis, err = net.Listen("tcp", s.Listen)
 	if err != nil {
@@ -67,13 +72,13 @@ func (s *Server) loadMethods() error {
 		return err
 	}
 
-	files, err := protodesc.NewFiles(fds)
+	s.files, err = protodesc.NewFiles(fds)
 	if err != nil {
 		return err
 	}
 
 	s.methods = make(map[string]method)
-	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		sds := fd.Services()
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
