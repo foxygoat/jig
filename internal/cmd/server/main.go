@@ -7,6 +7,7 @@ import (
 	"foxygo.at/jig/pb/greet"
 	"github.com/alecthomas/kong"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 )
 
 var version = "v0.0.0"
@@ -30,6 +31,7 @@ func run(addr string) error {
 		return err
 	}
 	grpcServer := grpc.NewServer()
+	reflection.Register(grpcServer)
 	greet.RegisterGreeterServer(grpcServer, newServer())
 	return grpcServer.Serve(lis)
 }
