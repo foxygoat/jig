@@ -35,9 +35,9 @@ func main() {
 }
 
 func (cs *cmdServe) Run() error {
-	s := serve.Server{
-		MethodDir: cs.MethodDir,
-		ProtoSet:  cs.ProtoSet,
+	s, err := serve.NewServer(cs.MethodDir, cs.ProtoSet)
+	if err != nil {
+		return err
 	}
 	return s.ListenAndServe(cs.Listen)
 }
