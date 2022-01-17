@@ -47,34 +47,29 @@ func findExtension(files *protoregistry.Files, pred extMatchFn) (protoreflect.Ex
 }
 
 func walkExtensions(files *protoregistry.Files, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
-	var eds []protoreflect.ExtensionDescriptor
+	var result []protoreflect.ExtensionType
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		eds = append(eds, rangeExtensions(fd.Extensions(), getAll, pred)...)
-		if len(eds) > 0 && !getAll {
+		result = append(result, rangeExtensions(fd.Extensions(), getAll, pred)...)
+		if len(result) > 0 && !getAll {
 			return false // stop after the first found
 		}
-		eds = append(eds, rangeMessages(fd.Messages(), getAll, pred)...)
-		if len(eds) > 0 && !getAll {
+		result = append(result, rangeMessages(fd.Messages(), getAll, pred)...)
+		if len(result) > 0 && !getAll {
 			return false // stop after the first found
 		}
 		return true
 	})
-
-	result := make([]protoreflect.ExtensionType, len(eds))
-	for i, ed := range eds {
-		result[i] = dynamicpb.NewExtensionType(ed)
-	}
 	return result
 }
 
-func rangeExtensions(eds protoreflect.ExtensionDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionDescriptor {
-	var result []protoreflect.ExtensionDescriptor
+func rangeExtensions(eds protoreflect.ExtensionDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
+	var result []protoreflect.ExtensionType
 
 	for i := 0; i < eds.Len(); i++ {
 		ed := eds.Get(i)
 		if pred(ed) {
-			result = append(result, ed)
+			result = append(result, dynamicpb.NewExtensionType(ed))
 			if !getAll {
 				break
 			}
@@ -83,8 +78,8 @@ func rangeExtensions(eds protoreflect.ExtensionDescriptors, getAll bool, pred ex
 	return result
 }
 
-func rangeMessages(mds protoreflect.MessageDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionDescriptor {
-	var result []protoreflect.ExtensionDescriptor
+func rangeMessages(mds protoreflect.MessageDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
+	var result []protoreflect.ExtensionType
 
 	for i := 0; i < mds.Len(); i++ {
 		md := mds.Get(i)
