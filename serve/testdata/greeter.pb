@@ -1,1 +1,0 @@
-../../pb/greet/greeter.pb

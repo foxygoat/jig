@@ -1,1 +1,0 @@
-../../../testdata/greet.Greeter.HelloBidiStream.jsonnet

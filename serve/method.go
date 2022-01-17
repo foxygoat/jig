@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
+	"io/fs"
 
 	"github.com/google/go-jsonnet"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
@@ -20,14 +20,16 @@ import (
 type method struct {
 	desc     protoreflect.MethodDescriptor
 	filename string
+	fs       fs.FS
 }
 
-func newMethod(md protoreflect.MethodDescriptor, methodDir string) method {
+func newMethod(md protoreflect.MethodDescriptor, fs fs.FS) method {
 	pkg, svc := md.ParentFile().Package(), md.Parent().Name()
 	filename := fmt.Sprintf("%s.%s.%s.jsonnet", pkg, svc, md.Name())
 	return method{
 		desc:     md,
-		filename: path.Join(methodDir, filename),
+		filename: filename,
+		fs:       fs,
 	}
 }
 
@@ -112,7 +114,11 @@ func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
 	vm := jsonnet.MakeVM()
 	// TODO(camh): Add jsonnext.Importer
 	vm.TLACode("input", input)
-	output, err := vm.EvaluateFile(m.filename)
+	b, err := fs.ReadFile(m.fs, m.filename)
+	if err != nil {
+		return err
+	}
+	output, err := vm.EvaluateAnonymousSnippet(m.filename, string(b))
 	if err != nil {
 		return err
 	}
