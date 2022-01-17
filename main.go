@@ -36,11 +36,10 @@ func main() {
 
 func (cs *cmdServe) Run() error {
 	s := serve.Server{
-		Listen:    cs.Listen,
 		MethodDir: cs.MethodDir,
 		ProtoSet:  cs.ProtoSet,
 	}
-	return s.Run()
+	return s.ListenAndServe(cs.Listen)
 }
 
 func (cb *cmdBones) Run() error {

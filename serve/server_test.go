@@ -10,13 +10,8 @@ import (
 )
 
 func newTestServer(methodDir string) *TestServer {
-	return &TestServer{
-		Server{
-			Listen:    "localhost:0",
-			MethodDir: (filepath.Join("testdata", methodDir)),
-			ProtoSet:  "testdata/greeter.pb",
-		},
-	}
+	methodDir = filepath.Join("testdata", methodDir)
+	return NewTestServer(methodDir, "testdata/greeter.pb")
 }
 
 type testCase struct {
@@ -26,7 +21,6 @@ type testCase struct {
 
 func TestGreeterSample(t *testing.T) {
 	ts := newTestServer("sample")
-	require.NoError(t, ts.Start())
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())
@@ -81,7 +75,6 @@ type testCaseStatus struct {
 
 func TestGreeterSampleStatus(t *testing.T) {
 	ts := newTestServer("sample")
-	require.NoError(t, ts.Start())
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())

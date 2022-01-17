@@ -4,6 +4,7 @@ package serve
 
 import (
 	"errors"
+	"fmt"
 	"net"
 	"os"
 
@@ -19,48 +20,50 @@ import (
 )
 
 type Server struct {
-	Listen    string
 	MethodDir string
 	ProtoSet  string
 
 	methods map[string]method
 	gs      *grpc.Server
-	lis     net.Listener
 	files   *protoregistry.Files
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
 
-func (s *Server) setup() error {
-	err := s.loadMethods()
-	if err != nil {
-		return err
+func NewServer(methodDir, protoSet string) (*Server, error) {
+	s := &Server{
+		MethodDir: methodDir,
+		ProtoSet:  protoSet,
 	}
+	if err := s.loadMethods(); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
 
+func (s *Server) Serve(lis net.Listener) error {
 	s.gs = grpc.NewServer(
 		grpc.StreamInterceptor(s.intercept),
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
-
 	reflection.NewService(s.files).Register(s.gs)
+	return s.gs.Serve(lis)
+}
 
-	s.lis, err = net.Listen("tcp", s.Listen)
+func (s *Server) ListenAndServe(listenAddr string) error {
+	l, err := net.Listen("tcp", listenAddr)
 	if err != nil {
 		return err
 	}
-	return nil
-}
-
-func (s *Server) Run() error {
-	if err := s.setup(); err != nil {
-		return err
-	}
-	return s.gs.Serve(s.lis)
+	return s.Serve(l)
 }
 
 func (s *Server) Stop() {
-	s.gs.GracefulStop()
+	if s.gs != nil {
+		s.gs.GracefulStop()
+	}
 }
+
 func (s *Server) loadMethods() error {
 	b, err := os.ReadFile(s.ProtoSet)
 	if err != nil {
@@ -117,16 +120,26 @@ func unknownHandler(_ interface{}, stream grpc.ServerStream) error {
 
 type TestServer struct {
 	Server
+	lis net.Listener
 }
 
-func (s *TestServer) Start() error {
-	if err := s.setup(); err != nil {
-		return err
+// NewTestServer starts and returns a new TestServer.
+// The caller should call Stop when finished, to shut it down.
+func NewTestServer(methodDir, protoSet string) *TestServer {
+	s, err := NewServer(methodDir, protoSet)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create TestServer: %v", err))
 	}
-	go s.gs.Serve(s.lis) //nolint:errcheck
-	return nil
+	ts := &TestServer{Server: *s}
+	l, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		panic(fmt.Sprintf("TestServer failed to listen: %v", err))
+	}
+	ts.lis = l
+	go ts.Serve(l) //nolint: errcheck
+	return ts
 }
 
-func (s *TestServer) Addr() string {
-	return s.lis.Addr().String()
+func (ts *TestServer) Addr() string {
+	return ts.lis.Addr().String()
 }
