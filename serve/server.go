@@ -20,8 +20,8 @@ import (
 )
 
 type Server struct {
-	MethodDir string
-	ProtoSet  string
+	methodDir string
+	protoSet  string
 
 	methods map[string]method
 	gs      *grpc.Server
@@ -32,8 +32,8 @@ var errUnknownHandler = errors.New("Unknown handler")
 
 func NewServer(methodDir, protoSet string) (*Server, error) {
 	s := &Server{
-		MethodDir: methodDir,
-		ProtoSet:  protoSet,
+		methodDir: methodDir,
+		protoSet:  protoSet,
 	}
 	if err := s.loadMethods(); err != nil {
 		return nil, err
@@ -65,7 +65,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) loadMethods() error {
-	b, err := os.ReadFile(s.ProtoSet)
+	b, err := os.ReadFile(s.protoSet)
 	if err != nil {
 		return err
 	}
@@ -86,7 +86,7 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), s.MethodDir)
+				m := newMethod(mds.Get(j), s.methodDir)
 				s.methods[m.fullMethod()] = m
 			}
 		}
