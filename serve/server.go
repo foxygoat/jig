@@ -5,9 +5,9 @@ package serve
 import (
 	"errors"
 	"net"
+	"net/http"
 	"os"
 
-	"foxygo.at/jig/reflection"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -16,6 +16,8 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
+
+	"foxygo.at/jig/reflection"
 )
 
 type Server struct {
@@ -55,12 +57,23 @@ func (s *Server) Run() error {
 	if err := s.setup(); err != nil {
 		return err
 	}
-	return s.gs.Serve(s.lis)
+	return http.Serve(s.lis, s)
 }
 
 func (s *Server) Stop() {
 	s.gs.GracefulStop()
 }
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, method := range s.methods {
+		if rule, vars := method.matchHTTPRequest(r); rule != nil {
+			method.serveHTTP(rule, vars, w, r)
+			return
+		}
+	}
+	s.gs.ServeHTTP(w, r)
+}
+
 func (s *Server) loadMethods() error {
 	b, err := os.ReadFile(s.ProtoSet)
 	if err != nil {
@@ -89,7 +102,7 @@ func (s *Server) loadMethods() error {
 		}
 		return true
 	})
-	return nil
+	return err
 }
 
 func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {

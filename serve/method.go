@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"path"
 
 	"github.com/google/go-jsonnet"
+	"google.golang.org/genproto/googleapis/api/annotations"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -15,10 +17,13 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
+
+	"foxygo.at/jig/serve/httprule"
 )
 
 type method struct {
 	desc     protoreflect.MethodDescriptor
+	rules    []*annotations.HttpRule
 	filename string
 }
 
@@ -27,12 +32,22 @@ func newMethod(md protoreflect.MethodDescriptor, methodDir string) method {
 	filename := fmt.Sprintf("%s.%s.%s.jsonnet", pkg, svc, md.Name())
 	return method{
 		desc:     md,
+		rules:    httprule.Collect(md),
 		filename: path.Join(methodDir, filename),
 	}
 }
 
 func (m method) fullMethod() string {
 	return fmt.Sprintf("/%s.%s/%s", m.desc.ParentFile().Package(), m.desc.Parent().Name(), m.desc.Name())
+}
+
+func (m method) matchHTTPRequest(req *http.Request) (*annotations.HttpRule, map[string]string) {
+	for _, rule := range m.rules {
+		if vars := httprule.MatchRequest(rule, req); vars != nil {
+			return rule, vars
+		}
+	}
+	return nil, nil
 }
 
 func (m method) call(ss grpc.ServerStream) error {
@@ -138,6 +153,17 @@ func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
 		}
 	}
 	return nil
+}
+
+// Serve a google.api.http annotated method as HTTP
+func (m method) serveHTTP(rule *annotations.HttpRule, vars map[string]string, w http.ResponseWriter, r *http.Request) {
+	in := dynamicpb.NewMessage(m.desc.Input())
+	err := httprule.DecodeRequest(rule, vars, r, in)
+	switch {
+	case m.desc.IsStreamingClient() && m.desc.IsStreamingServer():
+	case m.desc.IsStreamingClient():
+	default: // handle both unary and streaming-server
+	}
 }
 
 type request struct {
