@@ -30,10 +30,18 @@ func WithFS(fs fs.FS) Option {
 	}
 }
 
+func WithLogger(logger Logger) Option {
+	return func(s *Server) error {
+		s.log = logger
+		return nil
+	}
+}
+
 type Server struct {
 	methodDir string
 	protoSet  string
 
+	log     Logger
 	methods map[string]method
 	gs      *grpc.Server
 	files   *protoregistry.Files
@@ -47,6 +55,7 @@ func NewServer(methodDir, protoSet string, options ...Option) (*Server, error) {
 	s := &Server{
 		methodDir: methodDir,
 		protoSet:  protoSet,
+		log:       NewLogger(os.Stderr, LogLevelError),
 	}
 	for _, opt := range options {
 		if err := opt(s); err != nil {
@@ -122,19 +131,28 @@ func (s *Server) loadMethods() error {
 }
 
 func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	s.log.Debugf("%s: new request", info.FullMethod)
 	// If the handler returns anything except errUnknownHandler, then we
 	// have intercepted a real method and we are done now. Otherwise we
 	// dispatch the method to a jsonnet handler.
 	if err := handler(srv, ss); !errors.Is(err, errUnknownHandler) {
+		if err != nil {
+			s.log.Errorf("%s: %s", info.FullMethod, err)
+		}
 		return err
 	}
 
 	method, ok := s.methods[info.FullMethod]
 	if !ok {
+		s.log.Warnf("%s: method not found", info.FullMethod)
 		return status.Errorf(codes.Unimplemented, "method not found: %s", info.FullMethod)
 	}
 
-	return method.call(ss)
+	err := method.call(ss)
+	if err != nil {
+		s.log.Errorf("%s: %s", info.FullMethod, err)
+	}
+	return err
 }
 
 // unknownHandler returns a sentinel error so the interceptor knows when

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+
 	"foxygo.at/jig/bones"
 	"foxygo.at/jig/serve"
 	"github.com/alecthomas/kong"
@@ -15,9 +17,10 @@ type config struct {
 }
 
 type cmdServe struct {
-	ProtoSet  string `short:"p" help:"Protoset .pb file containing service and deps" required:""`
-	MethodDir string `short:"m" default:"." help:"Directory containing method definitions"`
-	Listen    string `short:"l" default:"localhost:8080" help:"TCP listen address"`
+	LogLevel  serve.LogLevel `help:"Server logging level." default:"error"`
+	ProtoSet  string         `short:"p" help:"Protoset .pb file containing service and deps" required:""`
+	MethodDir string         `short:"m" default:"." help:"Directory containing method definitions"`
+	Listen    string         `short:"l" default:"localhost:8080" help:"TCP listen address"`
 }
 
 type cmdBones struct {
@@ -35,7 +38,8 @@ func main() {
 }
 
 func (cs *cmdServe) Run() error {
-	s, err := serve.NewServer(cs.MethodDir, cs.ProtoSet)
+	logger := serve.NewLogger(os.Stderr, cs.LogLevel)
+	s, err := serve.NewServer(cs.MethodDir, cs.ProtoSet, serve.WithLogger(logger))
 	if err != nil {
 		return err
 	}
