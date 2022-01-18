@@ -5,6 +5,7 @@ package serve
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net"
 	"os"
 
@@ -19,6 +20,16 @@ import (
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
+// Option is a functional option to configure Server
+type Option func(s *Server) error
+
+func WithFS(fs fs.FS) Option {
+	return func(s *Server) error {
+		s.fs = fs
+		return nil
+	}
+}
+
 type Server struct {
 	methodDir string
 	protoSet  string
@@ -26,14 +37,21 @@ type Server struct {
 	methods map[string]method
 	gs      *grpc.Server
 	files   *protoregistry.Files
+	fs      fs.FS
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
 
-func NewServer(methodDir, protoSet string) (*Server, error) {
+// NewServer creates a new Server. Its API is currently unstable.
+func NewServer(methodDir, protoSet string, options ...Option) (*Server, error) {
 	s := &Server{
 		methodDir: methodDir,
 		protoSet:  protoSet,
+	}
+	for _, opt := range options {
+		if err := opt(s); err != nil {
+			return nil, err
+		}
 	}
 	if err := s.loadMethods(); err != nil {
 		return nil, err
@@ -65,7 +83,15 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) loadMethods() error {
-	b, err := os.ReadFile(s.protoSet)
+	var b []byte
+	var err error
+	methodFS := s.fs
+	if s.fs != nil {
+		b, err = fs.ReadFile(s.fs, s.protoSet)
+	} else {
+		b, err = os.ReadFile(s.protoSet)
+		methodFS = os.DirFS(s.methodDir)
+	}
 	if err != nil {
 		return err
 	}
@@ -86,7 +112,7 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), s.methodDir)
+				m := newMethod(mds.Get(j), methodFS)
 				s.methods[m.fullMethod()] = m
 			}
 		}
@@ -125,8 +151,8 @@ type TestServer struct {
 
 // NewTestServer starts and returns a new TestServer.
 // The caller should call Stop when finished, to shut it down.
-func NewTestServer(methodDir, protoSet string) *TestServer {
-	s, err := NewServer(methodDir, protoSet)
+func NewTestServer(methodDir, protoSet string, options ...Option) *TestServer {
+	s, err := NewServer(methodDir, protoSet, options...)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create TestServer: %v", err))
 	}

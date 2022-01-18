@@ -2,16 +2,16 @@ package serve
 
 import (
 	"bytes"
-	"path/filepath"
+	"embed"
+	"io/fs"
 	"testing"
 
 	"foxygo.at/jig/internal/client"
 	"github.com/stretchr/testify/require"
 )
 
-func newTestServer(methodDir string) *TestServer {
-	methodDir = filepath.Join("testdata", methodDir)
-	return NewTestServer(methodDir, "testdata/greeter.pb")
+func newTestServer() *TestServer {
+	return NewTestServer("testdata/greet", "testdata/greet/greeter.pb")
 }
 
 type testCase struct {
@@ -20,7 +20,7 @@ type testCase struct {
 }
 
 func TestGreeterSample(t *testing.T) {
-	ts := newTestServer("sample")
+	ts := newTestServer()
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())
@@ -74,7 +74,7 @@ type testCaseStatus struct {
 }
 
 func TestGreeterSampleStatus(t *testing.T) {
-	ts := newTestServer("sample")
+	ts := newTestServer()
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())
@@ -115,4 +115,28 @@ Trailer: map[]`
 			require.Equal(t, want, out.String())
 		})
 	}
+}
+
+//go:embed testdata/greet
+var embedFS embed.FS
+
+func TestGreeterEmbedFS(t *testing.T) {
+	methodFS, err := fs.Sub(embedFS, "testdata/greet")
+	require.NoError(t, err)
+	ts := NewTestServer("NOT-RELEVANT-METHOD-DIR", "greeter.pb", WithFS(methodFS))
+	defer ts.Stop()
+
+	c, err := client.New(ts.Addr())
+	require.NoError(t, err)
+	defer c.Close()
+
+	out := &bytes.Buffer{}
+
+	want := `Header: map[content-type:[application/grpc]]
+Greeting: 💃 jig [unary]: Hello 🌏
+Trailer: map[]
+`
+	err = c.Call(out, []string{"🌏"}, "unary")
+	require.NoError(t, err)
+	require.Equal(t, want, out.String())
 }
