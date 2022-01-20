@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"foxygo.at/jig/reflection"
+	"github.com/google/go-jsonnet"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,6 +23,9 @@ import (
 
 // Option is a functional option to configure Server
 type Option func(s *Server) error
+
+// MakeVM is a constructor for a jsonnet VMs, exposed for custom configuration.
+type MakeVM func() *jsonnet.VM
 
 func WithFS(fs fs.FS) Option {
 	return func(s *Server) error {
@@ -37,6 +41,13 @@ func WithLogger(logger Logger) Option {
 	}
 }
 
+func WithVM(makeVM MakeVM) Option {
+	return func(s *Server) error {
+		s.makeVM = makeVM
+		return nil
+	}
+}
+
 type Server struct {
 	methodDir string
 	protoSet  string
@@ -46,6 +57,7 @@ type Server struct {
 	gs      *grpc.Server
 	files   *protoregistry.Files
 	fs      fs.FS
+	makeVM  MakeVM
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
@@ -121,7 +133,7 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), methodFS)
+				m := newMethod(mds.Get(j), methodFS, s.makeVM)
 				s.methods[m.fullMethod()] = m
 			}
 		}

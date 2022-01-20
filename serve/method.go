@@ -21,15 +21,20 @@ type method struct {
 	desc     protoreflect.MethodDescriptor
 	filename string
 	fs       fs.FS
+	makeVM   MakeVM
 }
 
-func newMethod(md protoreflect.MethodDescriptor, fs fs.FS) method {
+func newMethod(md protoreflect.MethodDescriptor, fs fs.FS, makeVM MakeVM) method {
 	pkg, svc := md.ParentFile().Package(), md.Parent().Name()
 	filename := fmt.Sprintf("%s.%s.%s.jsonnet", pkg, svc, md.Name())
+	if makeVM == nil {
+		makeVM = jsonnet.MakeVM
+	}
 	return method{
 		desc:     md,
 		filename: filename,
 		fs:       fs,
+		makeVM:   makeVM,
 	}
 }
 
@@ -111,8 +116,7 @@ func (m method) streamingBidiCall(ss grpc.ServerStream) error {
 }
 
 func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
-	vm := jsonnet.MakeVM()
-	// TODO(camh): Add jsonnext.Importer
+	vm := m.makeVM()
 	vm.TLACode("input", input)
 	b, err := fs.ReadFile(m.fs, m.filename)
 	if err != nil {
