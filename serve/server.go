@@ -42,9 +42,28 @@ func WithLogger(logger Logger) Option {
 }
 
 func WithVM(makeVM MakeVM) Option {
+	return WithEvaluator(JsonnetEvaluator(makeVM))
+}
+
+type Evaluator func(method, input string, vfs fs.FS) (output string, err error)
+
+func WithEvaluator(evaluator Evaluator) Option {
 	return func(s *Server) error {
-		s.makeVM = makeVM
+		s.eval = evaluator
 		return nil
+	}
+}
+
+func JsonnetEvaluator(makeVM MakeVM) Evaluator {
+	return func(method, input string, vfs fs.FS) (output string, err error) {
+		vm := makeVM()
+		vm.TLACode("input", input)
+		filename := method + ".jsonnet"
+		b, err := fs.ReadFile(vfs, filename)
+		if err != nil {
+			return "", err
+		}
+		return vm.EvaluateAnonymousSnippet(filename, string(b))
 	}
 }
 
@@ -57,7 +76,7 @@ type Server struct {
 	gs      *grpc.Server
 	files   *protoregistry.Files
 	fs      fs.FS
-	makeVM  MakeVM
+	eval    Evaluator
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
@@ -69,6 +88,7 @@ func NewServer(methodDir, protoSet string, options ...Option) (*Server, error) {
 		protoSet:  protoSet,
 		log:       NewLogger(os.Stderr, LogLevelError),
 	}
+	options = append([]Option{WithVM(jsonnet.MakeVM)}, options...)
 	for _, opt := range options {
 		if err := opt(s); err != nil {
 			return nil, err
@@ -133,7 +153,7 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), methodFS, s.makeVM)
+				m := newMethod(mds.Get(j), methodFS, s.eval)
 				s.methods[m.fullMethod()] = m
 			}
 		}

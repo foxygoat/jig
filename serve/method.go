@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/google/go-jsonnet"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -21,20 +20,17 @@ type method struct {
 	desc     protoreflect.MethodDescriptor
 	filename string
 	fs       fs.FS
-	makeVM   MakeVM
+	eval     Evaluator
 }
 
-func newMethod(md protoreflect.MethodDescriptor, fs fs.FS, makeVM MakeVM) method {
+func newMethod(md protoreflect.MethodDescriptor, fs fs.FS, eval Evaluator) method {
 	pkg, svc := md.ParentFile().Package(), md.Parent().Name()
 	filename := fmt.Sprintf("%s.%s.%s.jsonnet", pkg, svc, md.Name())
-	if makeVM == nil {
-		makeVM = jsonnet.MakeVM
-	}
 	return method{
 		desc:     md,
 		filename: filename,
 		fs:       fs,
-		makeVM:   makeVM,
+		eval:     eval,
 	}
 }
 
@@ -66,7 +62,7 @@ func (m method) unaryClientCall(ss grpc.ServerStream) error {
 		return err
 	}
 
-	return m.evalJsonnet(input, ss)
+	return m.evaluate(input, ss)
 }
 
 func (m method) streamingClientCall(ss grpc.ServerStream) error {
@@ -88,7 +84,7 @@ func (m method) streamingClientCall(ss grpc.ServerStream) error {
 		return err
 	}
 
-	return m.evalJsonnet(input, ss)
+	return m.evaluate(input, ss)
 }
 
 func (m method) streamingBidiCall(ss grpc.ServerStream) error {
@@ -108,21 +104,15 @@ func (m method) streamingBidiCall(ss grpc.ServerStream) error {
 		if err != nil {
 			return err
 		}
-		if err := m.evalJsonnet(input, ss); err != nil {
+		if err := m.evaluate(input, ss); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m method) evalJsonnet(input string, ss grpc.ServerStream) error {
-	vm := m.makeVM()
-	vm.TLACode("input", input)
-	b, err := fs.ReadFile(m.fs, m.filename)
-	if err != nil {
-		return err
-	}
-	output, err := vm.EvaluateAnonymousSnippet(m.filename, string(b))
+func (m method) evaluate(input string, ss grpc.ServerStream) error {
+	output, err := m.eval(string(m.desc.FullName()), input, m.fs)
 	if err != nil {
 		return err
 	}
