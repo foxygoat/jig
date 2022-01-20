@@ -13,9 +13,8 @@ import (
 )
 
 func newTestServer() *TestServer {
-	lopOpt := WithLogger(NewLogger(io.Discard, LogLevelError))
-	fsOpt := WithFS(os.DirFS("testdata/greet"))
-	return NewTestServer(lopOpt, fsOpt)
+	withLogger := WithLogger(NewLogger(io.Discard, LogLevelError))
+	return NewTestServer(JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 }
 
 type testCase struct {
@@ -127,7 +126,7 @@ var embedFS embed.FS
 func TestGreeterEmbedFS(t *testing.T) {
 	methodFS, err := fs.Sub(embedFS, "testdata/greet")
 	require.NoError(t, err)
-	ts := NewTestServer(WithFS(methodFS))
+	ts := NewTestServer(JsonnetEvaluator(), methodFS)
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())
