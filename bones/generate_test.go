@@ -44,6 +44,6 @@ func requireSameContent(t *testing.T, wantDir, gotDir string) {
 		gotFileName := filepath.Join(gotDir, gotFile.Name())
 		gotBytes, err := os.ReadFile(gotFileName)
 		require.NoError(t, err)
-		require.Equalf(t, wantBytes, gotBytes, "file contents are not the same want: %s, got: %s", wantFile.Name(), gotFile.Name())
+		require.Equalf(t, string(wantBytes), string(gotBytes), "file contents are not the same for %s", wantFile.Name())
 	}
 }
