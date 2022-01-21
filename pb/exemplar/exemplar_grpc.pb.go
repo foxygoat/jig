@@ -19,6 +19,7 @@ const _ = grpc.SupportPackageIsVersion7
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ExemplarClient interface {
 	Sample(ctx context.Context, in *SampleRequest, opts ...grpc.CallOption) (*SampleResponse, error)
+	WellKnown(ctx context.Context, in *SampleRequest, opts ...grpc.CallOption) (*WellKnownSample, error)
 }
 
 type exemplarClient struct {
@@ -38,11 +39,21 @@ func (c *exemplarClient) Sample(ctx context.Context, in *SampleRequest, opts ...
 	return out, nil
 }
 
+func (c *exemplarClient) WellKnown(ctx context.Context, in *SampleRequest, opts ...grpc.CallOption) (*WellKnownSample, error) {
+	out := new(WellKnownSample)
+	err := c.cc.Invoke(ctx, "/exemplar.Exemplar/WellKnown", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ExemplarServer is the server API for Exemplar service.
 // All implementations must embed UnimplementedExemplarServer
 // for forward compatibility
 type ExemplarServer interface {
 	Sample(context.Context, *SampleRequest) (*SampleResponse, error)
+	WellKnown(context.Context, *SampleRequest) (*WellKnownSample, error)
 	mustEmbedUnimplementedExemplarServer()
 }
 
@@ -52,6 +63,9 @@ type UnimplementedExemplarServer struct {
 
 func (UnimplementedExemplarServer) Sample(context.Context, *SampleRequest) (*SampleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Sample not implemented")
+}
+func (UnimplementedExemplarServer) WellKnown(context.Context, *SampleRequest) (*WellKnownSample, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method WellKnown not implemented")
 }
 func (UnimplementedExemplarServer) mustEmbedUnimplementedExemplarServer() {}
 
@@ -84,6 +98,24 @@ func _Exemplar_Sample_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Exemplar_WellKnown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SampleRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ExemplarServer).WellKnown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/exemplar.Exemplar/WellKnown",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ExemplarServer).WellKnown(ctx, req.(*SampleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Exemplar_ServiceDesc is the grpc.ServiceDesc for Exemplar service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -94,6 +126,10 @@ var Exemplar_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Sample",
 			Handler:    _Exemplar_Sample_Handler,
+		},
+		{
+			MethodName: "WellKnown",
+			Handler:    _Exemplar_WellKnown_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

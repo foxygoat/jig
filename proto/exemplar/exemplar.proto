@@ -6,8 +6,20 @@ package exemplar;
 
 option go_package = "foxygo.at/jig/pb/exemplar";
 
+import "google/protobuf/any.proto";
+import "google/protobuf/api.proto";
+import "google/protobuf/duration.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/field_mask.proto";
+import "google/protobuf/source_context.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/type.proto";
+import "google/protobuf/wrappers.proto";
+
 service Exemplar {
   rpc Sample(SampleRequest) returns (SampleResponse);
+  rpc WellKnown(SampleRequest) returns (WellKnownSample);
 }
 
 message SampleRequest {
@@ -76,4 +88,34 @@ message SampleResponse {
     SampleEnum a_enum_oneof = 24;
     SampleMessage1 a_message_oneof = 25;
   }
+}
+
+message WellKnownSample {
+  google.protobuf.Any any = 1;
+  google.protobuf.Api api = 2;
+  google.protobuf.BoolValue bool_value = 3;
+  google.protobuf.BytesValue bytes_value = 4;
+  google.protobuf.DoubleValue double_value = 5;
+  google.protobuf.Duration duration = 6;
+  google.protobuf.Empty empty = 7;
+  google.protobuf.Enum an_enum = 8;
+  google.protobuf.EnumValue enum_value = 9;
+  google.protobuf.Field field = 10;
+  google.protobuf.FieldMask field_mask = 11;
+  google.protobuf.FloatValue float_value = 12;
+  google.protobuf.Int32Value int32_value = 13;
+  google.protobuf.Int64Value int64_value = 14;
+  google.protobuf.ListValue list_value = 15;
+  google.protobuf.Method method = 16;
+  google.protobuf.Mixin mixin = 17;
+  google.protobuf.NullValue null_value = 18;
+  google.protobuf.Option an_option = 19;
+  google.protobuf.SourceContext source_context = 20;
+  google.protobuf.StringValue string_value = 21;
+  google.protobuf.Struct struct = 22;
+  google.protobuf.Timestamp timestamp = 23;
+  google.protobuf.Type type = 24;
+  google.protobuf.UInt32Value uint32_value = 25;
+  google.protobuf.UInt64Value uint64_value = 26;
+  google.protobuf.Value value = 27;
 }

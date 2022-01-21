@@ -62,6 +62,12 @@ func MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 func MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 
+	if strings.HasPrefix(string(md.FullName()), "google.protobuf.") {
+		if e = WellKnownExemplar(md); len(e.lines) > 0 {
+			return e
+		}
+	}
+
 	for _, fd := range fields(md) {
 		fe := FieldExemplar(fd)
 		if fd.ContainingOneof() != nil {
@@ -72,6 +78,46 @@ func MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
 	}
 
 	e.nest("{", "}")
+	return e
+}
+
+// WellKnownExemplar returns an exemplar for a well-known type (those in the
+// google.protobuf package). These are typically messages that are rendered in
+// JSON as a single field, rather than as an object.
+//
+// https://developers.google.com/protocol-buffers/docs/reference/google.protobuf
+func WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
+	var e exemplar
+	switch string(md.Name()) {
+	case "Api", "Enum", "EnumValue", "Field", "Method", "Mixin", "Option", "SourceContext", "Type":
+		return e // empty exemplar. will be formatted as a message
+	case "Any":
+		// Emit an Any that can be read back in without modification
+		// Duration chosen at random, almost. Also for its simplicity.
+		e.line(`"@type": "type.googleapis.com/google.protobuf.Duration",`)
+		e.line(`value: "0s",`)
+		e.nest("{", "}")
+	case "BoolValue", "BytesValue", "DoubleValue", "FloatValue",
+		"Int32Value", "Int64Value", "StringValue", "UInt32Value", "UInt64Value":
+		return FieldValueExemplar(md.Fields().ByName("value"))
+	case "Duration":
+		e.line(`"0s"`)
+	case "Empty":
+		e.line("{}")
+	case "FieldMask":
+		e.line(`"field1.field2,field3"`)
+	case "ListValue":
+		return FieldValueExemplar(md.Fields().ByName("values"))
+	case "Struct":
+		e = FieldValueExemplar(md.Fields().Get(0).MapValue())
+		e.prepend("structField: ")
+		e.append(",")
+		e.nest("{", "}")
+	case "Timestamp":
+		e.line(`"2006-01-02T15:04:05.999999999Z"`)
+	case "Value":
+		e.line(`"https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#value"`)
+	}
 	return e
 }
 
@@ -133,6 +179,13 @@ func EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	if fd.Kind() != protoreflect.EnumKind {
 		return e
 	}
+
+	// The well-known google.protobuf.NullValue enum renders as "null"
+	if fd.Enum().FullName() == "google.protobuf.NullValue" {
+		e.line("null")
+		return e
+	}
+
 	ev := fd.Enum().Values()
 	name := ev.Get(0).Name()
 	if ev.Len() > 1 {
