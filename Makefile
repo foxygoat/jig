@@ -64,7 +64,7 @@ lint:  ## Lint go source code
 .PHONY: lint
 
 # --- Protos ---------------------------------------------------------------------
-PROTOFILES = $(shell find proto -name google -prune -o -regex '.*/[^_].*\.proto' -print | LANG=C sort)
+PROTOFILES = $(shell find proto -name google -prune -o -regex '.*/[^_][^/]*\.proto' -print | LANG=C sort)
 
 lint-proto:  ## Lint *.proto files
 	buf lint proto
