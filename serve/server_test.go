@@ -3,7 +3,9 @@ package serve
 import (
 	"bytes"
 	"embed"
+	"io"
 	"io/fs"
+	"os"
 	"testing"
 
 	"foxygo.at/jig/internal/client"
@@ -11,7 +13,9 @@ import (
 )
 
 func newTestServer() *TestServer {
-	return NewTestServer("testdata/greet", "testdata/greet/greeter.pb")
+	lopOpt := WithLogger(NewLogger(io.Discard, LogLevelError))
+	fsOpt := WithFS(os.DirFS("testdata/greet"))
+	return NewTestServer(lopOpt, fsOpt)
 }
 
 type testCase struct {
@@ -123,7 +127,7 @@ var embedFS embed.FS
 func TestGreeterEmbedFS(t *testing.T) {
 	methodFS, err := fs.Sub(embedFS, "testdata/greet")
 	require.NoError(t, err)
-	ts := NewTestServer("NOT-RELEVANT-METHOD-DIR", "greeter.pb", WithFS(methodFS))
+	ts := NewTestServer(WithFS(methodFS))
 	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())

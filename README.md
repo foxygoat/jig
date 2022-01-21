@@ -31,7 +31,7 @@ gRPC server receives a call to that method.
 
 You can generate skeleton jsonnet method definitions using `jig bones`:
 
-    jig bones --proto-set=service.pb --method-dir=dir
+    jig bones --proto-set=dir/service.pb --method-dir=dir
 
 Request protobuf messages are marshaled to JSON and passed to the jsonnet method
 definition function as the `input` parameter. If the method is a unary,
@@ -100,8 +100,7 @@ according to the [protojson] encoding rules.
 
 To serve these jsonnet methods, run:
 
-    jig serve --proto-set=service.pb --method-dir=dir
-
+    jig serve <dir>
 
 [gRPC status]: https://www.grpc.io/docs/guides/error/
 [protojson]: https://developers.google.com/protocol-buffers/docs/proto3#json
@@ -115,7 +114,7 @@ Build and start jig on the test data:
 
     . ./bin/activate-hermit
     make install
-    jig serve --proto-set pb/greet/greeter.pb --method-dir testdata
+    jig serve testdata pb/greet
 
 in a second terminal call it with:
 

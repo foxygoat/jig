@@ -17,10 +17,11 @@ type config struct {
 }
 
 type cmdServe struct {
-	LogLevel  serve.LogLevel `help:"Server logging level." default:"error"`
-	ProtoSet  string         `short:"p" help:"Protoset .pb file containing service and deps" required:""`
-	MethodDir string         `short:"m" default:"." help:"Directory containing method definitions"`
-	Listen    string         `short:"l" default:"localhost:8080" help:"TCP listen address"`
+	ProtoSet []string       `short:"p" help:"Protoset .pb files containing service and deps"`
+	LogLevel serve.LogLevel `help:"Server logging level." default:"error"`
+	Listen   string         `short:"l" default:"localhost:8080" help:"TCP listen address"`
+
+	Dirs []string `arg:"" help:"Directory containing method definitions and protoset .pb file"`
 }
 
 type cmdBones struct {
@@ -38,8 +39,9 @@ func main() {
 }
 
 func (cs *cmdServe) Run() error {
-	logger := serve.NewLogger(os.Stderr, cs.LogLevel)
-	s, err := serve.NewServer(cs.MethodDir, cs.ProtoSet, serve.WithLogger(logger))
+	withLogger := serve.WithLogger(serve.NewLogger(os.Stderr, cs.LogLevel))
+	withDirs := serve.WithDirs(cs.Dirs...)
+	s, err := serve.NewServer(withDirs, withLogger)
 	if err != nil {
 		return err
 	}

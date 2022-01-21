@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net"
 	"os"
+	"strings"
 
 	"foxygo.at/jig/reflection"
 	"github.com/google/go-jsonnet"
@@ -27,9 +28,26 @@ type Option func(s *Server) error
 // MakeVM is a constructor for a jsonnet VMs, exposed for custom configuration.
 type MakeVM func() *jsonnet.VM
 
-func WithFS(fs fs.FS) Option {
+func WithFS(dirs ...fs.FS) Option {
 	return func(s *Server) error {
-		s.fs = fs
+		s.fs = append(s.fs, dirs...)
+		return nil
+	}
+}
+
+func WithDirs(dirs ...string) Option {
+	return func(s *Server) error {
+		for _, dir := range dirs {
+			vfs := os.DirFS(dir)
+			s.fs = append(s.fs, vfs)
+		}
+		return nil
+	}
+}
+
+func WithProtosets(protosets ...string) Option {
+	return func(s *Server) error {
+		s.protosets = append(s.protosets, protosets...)
 		return nil
 	}
 }
@@ -49,30 +67,30 @@ func WithVM(makeVM MakeVM) Option {
 }
 
 type Server struct {
-	methodDir string
-	protoSet  string
-
-	log     Logger
-	methods map[string]method
-	gs      *grpc.Server
-	files   *protoregistry.Files
-	fs      fs.FS
-	makeVM  MakeVM
+	log       Logger
+	methods   map[string]method
+	gs        *grpc.Server
+	files     *protoregistry.Files
+	fs        stackedFS
+	protosets []string
+	makeVM    MakeVM
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
 
 // NewServer creates a new Server. Its API is currently unstable.
-func NewServer(methodDir, protoSet string, options ...Option) (*Server, error) {
+func NewServer(options ...Option) (*Server, error) {
 	s := &Server{
-		methodDir: methodDir,
-		protoSet:  protoSet,
-		log:       NewLogger(os.Stderr, LogLevelError),
+		files: new(protoregistry.Files),
+		log:   NewLogger(os.Stderr, LogLevelError),
 	}
 	for _, opt := range options {
 		if err := opt(s); err != nil {
 			return nil, err
 		}
+	}
+	if len(s.fs) == 0 {
+		return nil, fmt.Errorf("missing directory")
 	}
 	if err := s.loadMethods(); err != nil {
 		return nil, err
@@ -104,26 +122,7 @@ func (s *Server) Stop() {
 }
 
 func (s *Server) loadMethods() error {
-	var b []byte
-	var err error
-	methodFS := s.fs
-	if s.fs != nil {
-		b, err = fs.ReadFile(s.fs, s.protoSet)
-	} else {
-		b, err = os.ReadFile(s.protoSet)
-		methodFS = os.DirFS(s.methodDir)
-	}
-	if err != nil {
-		return err
-	}
-
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(b, fds); err != nil {
-		return err
-	}
-
-	s.files, err = protodesc.NewFiles(fds)
-	if err != nil {
+	if err := s.loadProtosets(); err != nil {
 		return err
 	}
 
@@ -133,9 +132,63 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), methodFS, s.makeVM)
+				m := newMethod(mds.Get(j), s.fs, s.makeVM)
 				s.methods[m.fullMethod()] = m
 			}
+		}
+		return true
+	})
+	return nil
+}
+
+func (s *Server) loadProtosets() error {
+	seen := map[string]bool{}
+	for _, protoset := range s.protosets {
+		b, err := os.ReadFile(protoset)
+		if err != nil {
+			return err
+		}
+		if err := s.addFiles(b, seen); err != nil {
+			return err
+		}
+	}
+
+	matches, err := fs.Glob(s.fs, "*.pb")
+	if err != nil {
+		return err
+	}
+	for _, match := range matches {
+		if strings.HasPrefix(match, "_") {
+			continue
+		}
+		b, err := fs.ReadFile(s.fs, match)
+		if err != nil {
+			return err
+		}
+		if err := s.addFiles(b, seen); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Server) addFiles(b []byte, seen map[string]bool) error {
+	fds := &descriptorpb.FileDescriptorSet{}
+	if err := proto.Unmarshal(b, fds); err != nil {
+		return err
+	}
+	files, err := protodesc.NewFiles(fds)
+	if err != nil {
+		return err
+	}
+	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		if seen[fd.Path()] {
+			return true
+		}
+		seen[fd.Path()] = true
+		err := s.files.RegisterFile(fd)
+		if err != nil {
+			s.log.Errorf("cannot register %q: %v", fd.FullName(), err)
 		}
 		return true
 	})
@@ -181,8 +234,8 @@ type TestServer struct {
 
 // NewTestServer starts and returns a new TestServer.
 // The caller should call Stop when finished, to shut it down.
-func NewTestServer(methodDir, protoSet string, options ...Option) *TestServer {
-	s, err := NewServer(methodDir, protoSet, options...)
+func NewTestServer(options ...Option) *TestServer {
+	s, err := NewServer(options...)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create TestServer: %v", err))
 	}
