@@ -2,8 +2,23 @@ package serve
 
 import (
 	"io/fs"
+	"os"
 	"sort"
 )
+
+// NewFS combines the top level directories of multiple fs.FS.
+func NewFS(vfs ...fs.FS) fs.FS {
+	return stackedFS(vfs)
+}
+
+// NewFSFromDirs combines the top level directories of multiple directories.
+func NewFSFromDirs(dirs ...string) fs.FS {
+	result := make([]fs.FS, len(dirs))
+	for i, dir := range dirs {
+		result[i] = os.DirFS(dir)
+	}
+	return stackedFS(result)
+}
 
 type stackedFS []fs.FS
 

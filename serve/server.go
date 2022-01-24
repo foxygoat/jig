@@ -1,5 +1,5 @@
-// Package serve implements the "jig serve" command, serving GRPC services
-// defined in a protoset file using the jsonnet contained in a method directory.
+// Package serve implements the "jig serve" command, serving GRPC
+// services via an evaluator.
 package serve
 
 import (
@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"foxygo.at/jig/reflection"
-	"github.com/google/go-jsonnet"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,26 +23,6 @@ import (
 
 // Option is a functional option to configure Server
 type Option func(s *Server) error
-
-// MakeVM is a constructor for a jsonnet VMs, exposed for custom configuration.
-type MakeVM func() *jsonnet.VM
-
-func WithFS(dirs ...fs.FS) Option {
-	return func(s *Server) error {
-		s.fs = append(s.fs, dirs...)
-		return nil
-	}
-}
-
-func WithDirs(dirs ...string) Option {
-	return func(s *Server) error {
-		for _, dir := range dirs {
-			vfs := os.DirFS(dir)
-			s.fs = append(s.fs, vfs)
-		}
-		return nil
-	}
-}
 
 func WithProtosets(protosets ...string) Option {
 	return func(s *Server) error {
@@ -59,38 +38,31 @@ func WithLogger(logger Logger) Option {
 	}
 }
 
-func WithVM(makeVM MakeVM) Option {
-	return func(s *Server) error {
-		s.makeVM = makeVM
-		return nil
-	}
-}
-
 type Server struct {
 	log       Logger
 	methods   map[string]method
 	gs        *grpc.Server
 	files     *protoregistry.Files
-	fs        stackedFS
+	fs        fs.FS
 	protosets []string
-	makeVM    MakeVM
+	eval      Evaluator
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
 
-// NewServer creates a new Server. Its API is currently unstable.
-func NewServer(options ...Option) (*Server, error) {
+// NewServer creates a new Server for given evaluator, e.g. Jsonnet and
+// data Directories.
+func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	s := &Server{
 		files: new(protoregistry.Files),
 		log:   NewLogger(os.Stderr, LogLevelError),
+		eval:  eval,
+		fs:    vfs,
 	}
 	for _, opt := range options {
 		if err := opt(s); err != nil {
 			return nil, err
 		}
-	}
-	if len(s.fs) == 0 {
-		return nil, fmt.Errorf("missing directory")
 	}
 	if err := s.loadMethods(); err != nil {
 		return nil, err
@@ -132,7 +104,7 @@ func (s *Server) loadMethods() error {
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), s.fs, s.makeVM)
+				m := newMethod(mds.Get(j), s.fs, s.eval)
 				s.methods[m.fullMethod()] = m
 			}
 		}
@@ -199,7 +171,7 @@ func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.Str
 	s.log.Debugf("%s: new request", info.FullMethod)
 	// If the handler returns anything except errUnknownHandler, then we
 	// have intercepted a real method and we are done now. Otherwise we
-	// dispatch the method to a jsonnet handler.
+	// dispatch the method to the evaluator.
 	if err := handler(srv, ss); !errors.Is(err, errUnknownHandler) {
 		if err != nil {
 			s.log.Errorf("%s: %s", info.FullMethod, err)
@@ -222,7 +194,7 @@ func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.Str
 
 // unknownHandler returns a sentinel error so the interceptor knows when
 // calling it that is intercepting an unknown method and should dispatch
-// it to jsonnet.
+// it to the evaluator.
 func unknownHandler(_ interface{}, stream grpc.ServerStream) error {
 	return errUnknownHandler
 }
@@ -234,8 +206,8 @@ type TestServer struct {
 
 // NewTestServer starts and returns a new TestServer.
 // The caller should call Stop when finished, to shut it down.
-func NewTestServer(options ...Option) *TestServer {
-	s, err := NewServer(options...)
+func NewTestServer(eval Evaluator, vfs fs.FS, options ...Option) *TestServer {
+	s, err := NewServer(eval, vfs, options...)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create TestServer: %v", err))
 	}
