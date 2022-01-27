@@ -17,14 +17,14 @@ import (
 // slice. Method exemplars are written to stdout if methodDir is empty,
 // otherwise each method is written to a separate file in that directory.
 // Existing files will not be overwritten unless force is true.
-func Generate(protoSet, methodDir string, force bool, targets []string) error {
+func Generate(protoSet, methodDir string, force bool, targets []string, formatter FormatOptions) error {
 	files, err := loadProtoSet(protoSet)
 	if err != nil {
 		return err
 	}
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		err = genFile(fd, methodDir, force, targets)
+		err = genFile(fd, methodDir, force, targets, formatter)
 		return err == nil
 	})
 
@@ -47,10 +47,10 @@ func loadProtoSet(protoSet string) (*protoregistry.Files, error) {
 	return files, nil
 }
 
-func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string) error {
+func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter FormatOptions) error {
 	for _, sd := range services(fd) {
 		for _, md := range methods(sd) {
-			if err := genMethod(md, methodDir, force, targets); err != nil {
+			if err := genMethod(md, methodDir, force, targets, formatter); err != nil {
 				return err
 			}
 		}
@@ -58,7 +58,7 @@ func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targe
 	return nil
 }
 
-func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string) error {
+func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatter FormatOptions) error {
 	var err error
 	if !match(md, targets) {
 		return nil
@@ -72,7 +72,7 @@ func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, t
 			// os.ErrExist if the file exists.
 			flag |= os.O_EXCL
 		}
-		filename := path.Join(methodDir, string(md.FullName())+".jsonnet")
+		filename := path.Join(methodDir, string(md.FullName())+formatter.Extension())
 		f, err = os.OpenFile(filename, flag, 0666)
 		if err != nil {
 			if os.IsExist(err) && !force {
@@ -89,7 +89,7 @@ func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, t
 		}()
 	}
 
-	_, err = fmt.Fprintln(f, MethodExemplar(md))
+	_, err = fmt.Fprintln(f, formatter.MethodExemplar(md))
 	// Print a separator on stdout to separate multiple exemplars
 	if f == os.Stdout {
 		fmt.Fprintln(f)
