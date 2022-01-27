@@ -7,12 +7,31 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
+// FormatOptions is a configurable target language exemplar generator.
+type FormatOptions struct {
+	Lang       Lang
+	QuoteStyle QuoteStyle
+}
+
+// Return the file extension for the given language.
+func (o *FormatOptions) Extension() string {
+	return "." + o.Lang.String()
+}
+
+// Return the file extension for the given language.
+func (o *FormatOptions) quote(s string) string {
+	if o.QuoteStyle == Double {
+		return `"` + s + `"`
+	}
+	return `'` + s + `'`
+}
+
 // MethodExemplar returns an exemplar for a method, with an exemplar for the
 // input message as a comment and a function returning an exemplar of the
 // output message as the method implementation.
-func MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
+func (o *FormatOptions) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	// Format the input message exemplar as a comment
-	ime := MessageExemplar(md.Input())
+	ime := o.MessageExemplar(md.Input())
 	ime.append(",")
 	if md.IsStreamingClient() && !md.IsStreamingServer() {
 		ime.nest("stream: [", "],")
@@ -23,14 +42,19 @@ func MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	ime.prefix("// ")
 
 	// Format the output message exemplar
-	ome := MessageExemplar(md.Output())
+	ome := o.MessageExemplar(md.Output())
 	ome.append(",")
 	if md.IsStreamingServer() {
 		ome.nest("stream: [", "],")
 	} else {
 		ome.prepend("response: ")
 	}
-	ome.nest("function(input) {", "}")
+	if o.Lang == Jsonnet {
+		ome.nest("function(input) {", "}")
+	} else {
+		ome.nest("return {", "}")
+		ome.nest("function "+string(md.Name())+"(input) {", "}")
+	}
 
 	var methodType string
 	switch {
@@ -59,17 +83,17 @@ func MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 // with a field for every message field. Each field value is an exemplar of the
 // type of the field. Oneof fields are emitted as comments as a message should
 // not have more than one oneof specified.
-func MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (o *FormatOptions) MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 
 	if strings.HasPrefix(string(md.FullName()), "google.protobuf.") {
-		if e = WellKnownExemplar(md); len(e.lines) > 0 {
+		if e = o.WellKnownExemplar(md); len(e.lines) > 0 {
 			return e
 		}
 	}
 
 	for _, fd := range fields(md) {
-		fe := FieldExemplar(fd)
+		fe := o.FieldExemplar(fd)
 		if fd.ContainingOneof() != nil {
 			// Comment out one-of fields since they should not all be present.
 			fe.prefix("// ")
@@ -86,7 +110,7 @@ func MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
 // JSON as a single field, rather than as an object.
 //
 // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf
-func WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (o *FormatOptions) WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 	switch string(md.Name()) {
 	case "Api", "Enum", "EnumValue", "Field", "Method", "Mixin", "Option", "SourceContext", "Type":
@@ -94,29 +118,29 @@ func WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
 	case "Any":
 		// Emit an Any that can be read back in without modification
 		// Duration chosen at random, almost. Also for its simplicity.
-		e.line(`"@type": "type.googleapis.com/google.protobuf.Duration",`)
-		e.line(`value: "0s",`)
+		e.line(o.quote("@type") + ": " + o.quote("type.googleapis.com/google.protobuf.Duration") + ",")
+		e.line("value: " + o.quote("0s") + ",")
 		e.nest("{", "}")
 	case "BoolValue", "BytesValue", "DoubleValue", "FloatValue",
 		"Int32Value", "Int64Value", "StringValue", "UInt32Value", "UInt64Value":
-		return FieldValueExemplar(md.Fields().ByName("value"))
+		return o.FieldValueExemplar(md.Fields().ByName("value"))
 	case "Duration":
-		e.line(`"0s"`)
+		e.line(o.quote("0s"))
 	case "Empty":
 		e.line("{}")
 	case "FieldMask":
-		e.line(`"field1.field2,field3"`)
+		e.line(o.quote("field1.field2,field3"))
 	case "ListValue":
-		return FieldValueExemplar(md.Fields().ByName("values"))
+		return o.FieldValueExemplar(md.Fields().ByName("values"))
 	case "Struct":
-		e = FieldValueExemplar(md.Fields().Get(0).MapValue())
+		e = o.FieldValueExemplar(md.Fields().Get(0).MapValue())
 		e.prepend("structField: ")
 		e.append(",")
 		e.nest("{", "}")
 	case "Timestamp":
-		e.line(`"2006-01-02T15:04:05.999999999Z"`)
+		e.line(o.quote("2006-01-02T15:04:05.999999999Z"))
 	case "Value":
-		e.line(`"https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#value"`)
+		e.line(o.quote("https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#value"))
 	}
 	return e
 }
@@ -124,14 +148,14 @@ func WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
 // FieldExemplar returns an exemplar for a message field. It has the JSON name
 // for the field prefixed and a comment appended to the first line describing
 // the type of the field.
-func FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
-	e := FieldValueExemplar(fd)
+func (o *FormatOptions) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
+	e := o.FieldValueExemplar(fd)
 	e.prepend(fd.JSONName() + ": ")
 	e.append(",")
 
 	// Add a description of the type to the end of the first line of the
 	// exemplar as a comment. If part of a oneof, name the oneof too.
-	if desc := typeDescription(fd); desc != "" {
+	if desc := o.typeDescription(fd); desc != "" {
 		if od := fd.ContainingOneof(); od != nil {
 			desc += " (one-of " + string(od.Name()) + ")"
 		}
@@ -150,15 +174,15 @@ func FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
 //
 // Repeated fields are emitted with a single element exemplar of the repeated
 // type.
-func FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (o *FormatOptions) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
-		e = EnumExemplar(fd)
+		e = o.EnumExemplar(fd)
 	case protoreflect.MessageKind, protoreflect.GroupKind:
-		e = MessageExemplar(fd.Message())
+		e = o.MessageExemplar(fd.Message())
 	default:
-		e = ScalarExemplar(fd.Kind())
+		e = o.ScalarExemplar(fd.Kind())
 	}
 
 	if fd.Cardinality() == protoreflect.Repeated {
@@ -174,7 +198,7 @@ func FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
 // Enum exemplars are emitted as a string with the name of the second enum if
 // there is more than one enum value, otherwise the first enum. The second enum
 // is preferred as often the first enum is the "invalid" value for that enum.
-func EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (o *FormatOptions) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	if fd.Kind() != protoreflect.EnumKind {
 		return e
@@ -191,13 +215,13 @@ func EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	if ev.Len() > 1 {
 		name = ev.Get(1).Name()
 	}
-	e.line(`"`, string(name), `"`)
+	e.line(o.quote(string(name)))
 	return e
 }
 
 // ScalarExemplar returns an exemplar with a value for basic kinds that have a
 // single value (scalars). An empty exemplar is returned for other kinds.
-func ScalarExemplar(kind protoreflect.Kind) exemplar {
+func (o *FormatOptions) ScalarExemplar(kind protoreflect.Kind) exemplar {
 	var e exemplar
 	switch kind {
 	case protoreflect.BoolKind:
@@ -210,15 +234,15 @@ func ScalarExemplar(kind protoreflect.Kind) exemplar {
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		e.line("0.0")
 	case protoreflect.StringKind, protoreflect.BytesKind:
-		e.line(`""`)
+		e.line(o.quote(""))
 	}
 	return e
 }
 
 // typeDescription returns a string description of a field's type.
-func typeDescription(fd protoreflect.FieldDescriptor) string {
+func (o *FormatOptions) typeDescription(fd protoreflect.FieldDescriptor) string {
 	if fd.IsMap() {
-		return fmt.Sprintf("map<%s, %s>", typeDescription(fd.MapKey()), typeDescription(fd.MapValue()))
+		return fmt.Sprintf("map<%s, %s>", o.typeDescription(fd.MapKey()), o.typeDescription(fd.MapValue()))
 	}
 	result := ""
 	switch fd.Kind() {

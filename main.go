@@ -18,7 +18,7 @@ type config struct {
 
 type cmdServe struct {
 	ProtoSet []string       `short:"p" help:"Protoset .pb files containing service and deps"`
-	LogLevel serve.LogLevel `help:"Server logging level." default:"error"`
+	LogLevel serve.LogLevel `help:"Server logging level" default:"error"`
 	Listen   string         `short:"l" default:"localhost:8080" help:"TCP listen address"`
 
 	Dirs []string `arg:"" help:"Directory containing method definitions and protoset .pb file"`
@@ -29,6 +29,9 @@ type cmdBones struct {
 	MethodDir string   `short:"m" help:"Directory to write method definitions to"`
 	Force     bool     `short:"f" help:"Overwrite existing bones files"`
 	Targets   []string `arg:"" optional:"" help:"Target pkg/service/method to generate"`
+
+	Language   bones.Lang       `help:"Target language" default:"jsonnet"`
+	QuoteStyle bones.QuoteStyle `help:"Print single or double quotes" default:"double"`
 }
 
 func main() {
@@ -49,5 +52,9 @@ func (cs *cmdServe) Run() error {
 }
 
 func (cb *cmdBones) Run() error {
-	return bones.Generate(cb.ProtoSet, cb.MethodDir, cb.Force, cb.Targets)
+	opts := bones.FormatOptions{
+		Lang:       cb.Language,
+		QuoteStyle: cb.QuoteStyle,
+	}
+	return bones.Generate(cb.ProtoSet, cb.MethodDir, cb.Force, cb.Targets, opts)
 }

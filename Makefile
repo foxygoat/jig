@@ -47,9 +47,16 @@ check-coverage: test  ## Check that test coverage meets the required level
 cover: test  ## Show test coverage in your browser
 	go tool cover -html=$(COVERFILE)
 
+RUN_BONES = $(O)/jig bones --force --language=$(1) --quote-style=$(2) --proto-set pb/$(3)/$(4) --method-dir bones/testdata/golden/$(3)-$(2)
 golden: build  ## Generate golden test files
-	$(O)/jig bones --force --method-dir bones/testdata/golden/exemplar --proto-set pb/exemplar/exemplar.pb
-	$(O)/jig bones --force --method-dir bones/testdata/golden/greet --proto-set pb/greet/greeter.pb
+	$(call RUN_BONES,jsonnet,double,exemplar,exemplar.pb)
+	$(call RUN_BONES,jsonnet,double,greet,greeter.pb)
+	$(call RUN_BONES,jsonnet,single,exemplar,exemplar.pb)
+	$(call RUN_BONES,jsonnet,single,greet,greeter.pb)
+	$(call RUN_BONES,js,double,exemplar,exemplar.pb)
+	$(call RUN_BONES,js,double,greet,greeter.pb)
+	$(call RUN_BONES,js,single,exemplar,exemplar.pb)
+	$(call RUN_BONES,js,single,greet,greeter.pb)
 
 CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }

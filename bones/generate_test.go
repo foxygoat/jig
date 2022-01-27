@@ -10,17 +10,22 @@ import (
 
 func TestGenerateGolden(t *testing.T) {
 	tests := map[string]struct {
-		pbFile    string
-		goldenDir string
+		pbFile     string
+		goldenDir  string
+		quoteStyle QuoteStyle
 	}{
-		"exemplar": {pbFile: "testdata/exemplar.pb", goldenDir: "testdata/golden/exemplar"},
-		"greeter":  {pbFile: "testdata/greeter.pb", goldenDir: "testdata/golden/greet"},
+		"exemplar-double": {pbFile: "testdata/exemplar.pb", goldenDir: "testdata/golden/exemplar-double", quoteStyle: Double},
+		"greeter-double":  {pbFile: "testdata/greeter.pb", goldenDir: "testdata/golden/greet-double", quoteStyle: Double},
+		"exemplar-single": {pbFile: "testdata/exemplar.pb", goldenDir: "testdata/golden/exemplar-single", quoteStyle: Single},
+		"greeter-single":  {pbFile: "testdata/greeter.pb", goldenDir: "testdata/golden/greet-single", quoteStyle: Single},
 	}
 
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			err := Generate(tc.pbFile, dir, false, nil)
+			err := Generate(tc.pbFile, dir, false, nil, FormatOptions{QuoteStyle: tc.quoteStyle})
+			require.NoError(t, err)
+			err = Generate(tc.pbFile, dir, false, nil, FormatOptions{Lang: JS, QuoteStyle: tc.quoteStyle})
 			require.NoError(t, err)
 			requireSameContent(t, tc.goldenDir, dir)
 		})
