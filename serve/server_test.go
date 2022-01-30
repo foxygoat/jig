@@ -91,7 +91,8 @@ Header: map[content-type:[application/grpc] eat:[my shorts]]
 Trailer: map[a:[cow] dont:[have]]`
 	unaryErrWant := `
 rpc error: code = InvalidArgument desc = 💃 jig [unary]: eat my shorts
-seconds:42`
+seconds:42
+[google.api.http]:{post:"/api/greet/hello"}`
 	bidiWant := `
 Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [bidi]: Hello 1

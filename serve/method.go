@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 
+	"foxygo.at/jig/registry"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -33,12 +34,12 @@ func (s *Server) unaryClientCall(md protoreflect.MethodDescriptor, ss grpc.Serve
 		return err
 	}
 
-	input, err := makeInputJSON(req, mdata)
+	input, err := makeInputJSON(req, mdata, s.files)
 	if err != nil {
 		return err
 	}
 
-	return s.evaluate(md, input, ss)
+	return s.evaluate(md, input, ss, s.files)
 }
 
 func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -55,12 +56,12 @@ func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.S
 		stream = append(stream, msg)
 	}
 
-	input, err := makeStreamingInputJSON(stream, mdata)
+	input, err := makeStreamingInputJSON(stream, mdata, s.files)
 	if err != nil {
 		return err
 	}
 
-	return s.evaluate(md, input, ss)
+	return s.evaluate(md, input, ss, s.files)
 }
 
 func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -76,24 +77,24 @@ func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.Ser
 
 		// For bidirectional streaming, we call evaluator once for each message
 		// on the input stream and stream out the results.
-		input, err := makeInputJSON(msg, mdata)
+		input, err := makeInputJSON(msg, mdata, s.files)
 		if err != nil {
 			return err
 		}
-		if err := s.evaluate(md, input, ss); err != nil {
+		if err := s.evaluate(md, input, ss, s.files); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Server) evaluate(md protoreflect.MethodDescriptor, input string, ss grpc.ServerStream) error {
+func (s *Server) evaluate(md protoreflect.MethodDescriptor, input string, ss grpc.ServerStream, reg *registry.Files) error {
 	output, err := s.eval.Evaluate(string(md.FullName()), input, s.fs)
 	if err != nil {
 		return err
 	}
 
-	result, err := parseOutputJSON(output, md)
+	result, err := parseOutputJSON(output, md, s.files)
 	if err != nil {
 		return err
 	}
@@ -137,10 +138,10 @@ type methodResult struct {
 	status  *statuspb.Status
 }
 
-func makeInputJSON(msg *dynamicpb.Message, md metadata.MD) (string, error) {
+func makeInputJSON(msg *dynamicpb.Message, md metadata.MD, reg *registry.Files) (string, error) {
 	v := request{Header: md, Request: []byte("null")}
 	if msg != nil {
-		mo := protojson.MarshalOptions{EmitUnpopulated: true}
+		mo := protojson.MarshalOptions{EmitUnpopulated: true, Resolver: reg}
 		b, err := mo.Marshal(msg)
 		if err != nil {
 			return "", err
@@ -155,8 +156,8 @@ func makeInputJSON(msg *dynamicpb.Message, md metadata.MD) (string, error) {
 	return string(input), nil
 }
 
-func makeStreamingInputJSON(stream []*dynamicpb.Message, md metadata.MD) (string, error) {
-	mo := protojson.MarshalOptions{EmitUnpopulated: true}
+func makeStreamingInputJSON(stream []*dynamicpb.Message, md metadata.MD, reg *registry.Files) (string, error) {
+	mo := protojson.MarshalOptions{EmitUnpopulated: true, Resolver: reg}
 	v := request{Header: md, Stream: make([]json.RawMessage, 0, len(stream))}
 	for _, msg := range stream {
 		b, err := mo.Marshal(msg)
@@ -174,7 +175,7 @@ func makeStreamingInputJSON(stream []*dynamicpb.Message, md metadata.MD) (string
 	return string(input), nil
 }
 
-func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) (*methodResult, error) {
+func parseOutputJSON(output string, desc protoreflect.MethodDescriptor, reg *registry.Files) (*methodResult, error) {
 	v := response{}
 	if err := json.Unmarshal([]byte(output), &v); err != nil {
 		return nil, err
@@ -185,12 +186,14 @@ func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) (*method
 		trailer: v.Trailer,
 	}
 
+	uo := protojson.UnmarshalOptions{Resolver: reg}
+
 	if len(v.Status) > 0 {
 		if len(v.Stream) > 0 || v.Response != nil {
 			return nil, errors.New("method cannot return a response/stream and status")
 		}
 		var s statuspb.Status
-		if err := protojson.Unmarshal(v.Status, &s); err != nil {
+		if err := uo.Unmarshal(v.Status, &s); err != nil {
 			return nil, err
 		}
 		result.status = &s
@@ -215,7 +218,7 @@ func parseOutputJSON(output string, desc protoreflect.MethodDescriptor) (*method
 	result.stream = make([]*dynamicpb.Message, 0, len(v.Stream))
 	for _, jsonMsg := range v.Stream {
 		msg := dynamicpb.NewMessage(desc.Output())
-		if err := protojson.Unmarshal(jsonMsg, msg); err != nil {
+		if err := uo.Unmarshal(jsonMsg, msg); err != nil {
 			return nil, err
 		}
 		result.stream = append(result.stream, msg)

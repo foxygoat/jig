@@ -93,7 +93,7 @@ If a result has a `status` field, it must not have a `response` or `stream`
 field.
 
 The response can reference fields of the input using regular jsonnet references.
-See the [testdata samples](./testdata).
+See the [testdata samples](./serve/testdata/greet).
 
 The `request` and `response` fields are encoded from/to protobuf messages
 according to the [protojson] encoding rules.
@@ -114,7 +114,7 @@ Build and start jig on the test data:
 
     . ./bin/activate-hermit
     make install
-    jig serve testdata pb/greet
+    jig serve serve/testdata/greet
 
 in a second terminal call it with:
 

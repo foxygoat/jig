@@ -11,13 +11,13 @@ import (
 	"strings"
 
 	"foxygo.at/jig/reflection"
+	"foxygo.at/jig/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -41,7 +41,7 @@ func WithLogger(logger Logger) Option {
 type Server struct {
 	log       Logger
 	gs        *grpc.Server
-	files     *protoregistry.Files
+	files     *registry.Files
 	fs        fs.FS
 	protosets []string
 	eval      Evaluator
@@ -53,7 +53,7 @@ var errUnknownHandler = errors.New("Unknown handler")
 // data Directories.
 func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	s := &Server{
-		files: new(protoregistry.Files),
+		files: new(registry.Files),
 		log:   NewLogger(os.Stderr, LogLevelError),
 		eval:  eval,
 		fs:    vfs,
@@ -74,7 +74,7 @@ func (s *Server) Serve(lis net.Listener) error {
 		grpc.StreamInterceptor(s.intercept),
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
-	reflection.NewService(s.files).Register(s.gs)
+	reflection.NewService(&s.files.Files).Register(s.gs)
 	return s.gs.Serve(lis)
 }
 
@@ -113,6 +113,7 @@ func (s *Server) loadProtosets() error {
 		if strings.HasPrefix(match, "_") {
 			continue
 		}
+		s.log.Debugf("loading discovered protoset file: %s", match)
 		b, err := fs.ReadFile(s.fs, match)
 		if err != nil {
 			return err
