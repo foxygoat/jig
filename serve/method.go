@@ -3,9 +3,7 @@ package serve
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"io/fs"
 
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
@@ -16,56 +14,38 @@ import (
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-type method struct {
-	desc protoreflect.MethodDescriptor
-	fs   fs.FS
-	eval Evaluator
-}
-
-func newMethod(md protoreflect.MethodDescriptor, fs fs.FS, eval Evaluator) method {
-	return method{
-		desc: md,
-		fs:   fs,
-		eval: eval,
-	}
-}
-
-func (m method) fullMethod() string {
-	return fmt.Sprintf("/%s.%s/%s", m.desc.ParentFile().Package(), m.desc.Parent().Name(), m.desc.Name())
-}
-
-func (m method) call(ss grpc.ServerStream) error {
+func (s *Server) callMethod(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
 	switch {
-	case m.desc.IsStreamingClient() && m.desc.IsStreamingServer():
-		return m.streamingBidiCall(ss)
-	case m.desc.IsStreamingClient():
-		return m.streamingClientCall(ss)
+	case md.IsStreamingClient() && md.IsStreamingServer():
+		return s.streamingBidiCall(md, ss)
+	case md.IsStreamingClient():
+		return s.streamingClientCall(md, ss)
 	default: // handle both unary and streaming-server
-		return m.unaryClientCall(ss)
+		return s.unaryClientCall(md, ss)
 	}
 }
 
-func (m method) unaryClientCall(ss grpc.ServerStream) error {
+func (s *Server) unaryClientCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
 	// Handle unary client (request), with either unary or streaming server (response).
-	md, _ := metadata.FromIncomingContext(ss.Context())
-	req := dynamicpb.NewMessage(m.desc.Input())
+	mdata, _ := metadata.FromIncomingContext(ss.Context())
+	req := dynamicpb.NewMessage(md.Input())
 	if err := ss.RecvMsg(req); err != nil {
 		return err
 	}
 
-	input, err := makeInputJSON(req, md)
+	input, err := makeInputJSON(req, mdata)
 	if err != nil {
 		return err
 	}
 
-	return m.evaluate(input, ss)
+	return s.evaluate(md, input, ss)
 }
 
-func (m method) streamingClientCall(ss grpc.ServerStream) error {
-	md, _ := metadata.FromIncomingContext(ss.Context())
+func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
+	mdata, _ := metadata.FromIncomingContext(ss.Context())
 	var stream []*dynamicpb.Message
 	for {
-		msg := dynamicpb.NewMessage(m.desc.Input())
+		msg := dynamicpb.NewMessage(md.Input())
 		if err := ss.RecvMsg(msg); err != nil {
 			if !errors.Is(err, io.EOF) {
 				return err
@@ -75,18 +55,18 @@ func (m method) streamingClientCall(ss grpc.ServerStream) error {
 		stream = append(stream, msg)
 	}
 
-	input, err := makeStreamingInputJSON(stream, md)
+	input, err := makeStreamingInputJSON(stream, mdata)
 	if err != nil {
 		return err
 	}
 
-	return m.evaluate(input, ss)
+	return s.evaluate(md, input, ss)
 }
 
-func (m method) streamingBidiCall(ss grpc.ServerStream) error {
-	md, _ := metadata.FromIncomingContext(ss.Context())
+func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
+	mdata, _ := metadata.FromIncomingContext(ss.Context())
 	for {
-		msg := dynamicpb.NewMessage(m.desc.Input())
+		msg := dynamicpb.NewMessage(md.Input())
 		if err := ss.RecvMsg(msg); err != nil {
 			if !errors.Is(err, io.EOF) {
 				return err
@@ -96,24 +76,24 @@ func (m method) streamingBidiCall(ss grpc.ServerStream) error {
 
 		// For bidirectional streaming, we call evaluator once for each message
 		// on the input stream and stream out the results.
-		input, err := makeInputJSON(msg, md)
+		input, err := makeInputJSON(msg, mdata)
 		if err != nil {
 			return err
 		}
-		if err := m.evaluate(input, ss); err != nil {
+		if err := s.evaluate(md, input, ss); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (m method) evaluate(input string, ss grpc.ServerStream) error {
-	output, err := m.eval.Evaluate(string(m.desc.FullName()), input, m.fs)
+func (s *Server) evaluate(md protoreflect.MethodDescriptor, input string, ss grpc.ServerStream) error {
+	output, err := s.eval.Evaluate(string(md.FullName()), input, s.fs)
 	if err != nil {
 		return err
 	}
 
-	result, err := parseOutputJSON(output, m.desc)
+	result, err := parseOutputJSON(output, md)
 	if err != nil {
 		return err
 	}
