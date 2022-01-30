@@ -43,8 +43,9 @@ func main() {
 
 func (cs *cmdServe) Run() error {
 	withLogger := serve.WithLogger(serve.NewLogger(os.Stderr, cs.LogLevel))
+	withProtosets := serve.WithProtosets(cs.ProtoSet...)
 	dirs := serve.NewFSFromDirs(cs.Dirs...)
-	s, err := serve.NewServer(serve.JsonnetEvaluator(), dirs, withLogger)
+	s, err := serve.NewServer(serve.JsonnetEvaluator(), dirs, withLogger, withProtosets)
 	if err != nil {
 		return err
 	}
