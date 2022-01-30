@@ -15,6 +15,9 @@ import (
 // ensure Files implments ExtensionTypeResolver
 var _ protoregistry.ExtensionTypeResolver = (*Files)(nil)
 
+// ensure Files implments MessageTypeResolver
+var _ protoregistry.MessageTypeResolver = (*Files)(nil)
+
 func TestFindExtensionByName(t *testing.T) {
 	tests := map[string]struct {
 		extName string
@@ -97,6 +100,58 @@ func TestGetExtensionsOfMessage(t *testing.T) {
 				fields = append(fields, int32(et.TypeDescriptor().Number()))
 			}
 			require.ElementsMatch(t, tc.fields, fields)
+		})
+	}
+}
+
+func TestFindMessageByName(t *testing.T) {
+	tests := map[string]struct {
+		name string
+		err  error
+	}{
+		"top-level message":      {"regtest.BaseMessage", nil},
+		"nested message":         {"regtest.ExtensionMessage.NestedExtension", nil},
+		"unknown message":        {"regtest.Foo", protoregistry.NotFound},
+		"non-message descriptor": {"regtest.ef1", protoregistry.NotFound},
+	}
+
+	f := newFiles(t)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			messageName := protoreflect.FullName(tc.name)
+			mt, err := f.FindMessageByName(messageName)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+			} else {
+				require.NoError(t, err, tc.name)
+				require.Equal(t, messageName, mt.Descriptor().FullName())
+			}
+		})
+	}
+}
+
+func TestFindMessageByURL(t *testing.T) {
+	tests := map[string]struct {
+		url string
+		err error
+	}{
+		"simple url":       {"regtest.BaseMessage", nil},
+		"hostname url":     {"example.com/regtest.BaseMessage", nil},
+		"multiple slashes": {"example.com/foo/bar/regtest.BaseMessage", nil},
+		"unknown message":  {"example.com/regtest.Foo", protoregistry.NotFound},
+	}
+
+	f := newFiles(t)
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			mt, err := f.FindMessageByURL(tc.url)
+			if tc.err != nil {
+				require.ErrorIs(t, err, tc.err)
+			} else {
+				require.NoError(t, err, tc.url)
+				expected := protoreflect.FullName("regtest.BaseMessage")
+				require.Equal(t, expected, mt.Descriptor().FullName())
+			}
 		})
 	}
 }

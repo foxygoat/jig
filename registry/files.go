@@ -5,6 +5,8 @@
 package registry
 
 import (
+	"strings"
+
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -90,10 +92,25 @@ func getExtensions(ec extensionContainer, getAll bool, pred extMatchFn) []protor
 	return result
 }
 
-func (f *Files) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
-	return nil, protoregistry.NotFound
+func (f *Files) FindMessageByName(name protoreflect.FullName) (protoreflect.MessageType, error) {
+	desc, err := f.FindDescriptorByName(name)
+	if err != nil {
+		return nil, err
+	}
+	md, ok := desc.(protoreflect.MessageDescriptor)
+	if !ok {
+		return nil, protoregistry.NotFound
+	}
+	return dynamicpb.NewMessageType(md), nil
 }
 
 func (f *Files) FindMessageByURL(url string) (protoreflect.MessageType, error) {
-	return nil, protoregistry.NotFound
+	message := protoreflect.FullName(url)
+	// Strip off before the last slash - we only look locally for the
+	// message and do not hit the network. The part after the last slash
+	// must be the full name of the message.
+	if i := strings.LastIndexByte(url, '/'); i >= 0 {
+		message = message[i+len("/"):]
+	}
+	return f.FindMessageByName(message)
 }
