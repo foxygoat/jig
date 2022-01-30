@@ -116,6 +116,7 @@ func (s *Server) loadMethods() error {
 func (s *Server) loadProtosets() error {
 	seen := map[string]bool{}
 	for _, protoset := range s.protosets {
+		s.log.Debugf("loading protoset file: %s", protoset)
 		b, err := os.ReadFile(protoset)
 		if err != nil {
 			return err
@@ -158,6 +159,7 @@ func (s *Server) addFiles(b []byte, seen map[string]bool) error {
 			return true
 		}
 		seen[fd.Path()] = true
+		s.log.Debugf("loading file descriptor %s", fd.Path())
 		err := s.files.RegisterFile(fd)
 		if err != nil {
 			s.log.Errorf("cannot register %q: %v", fd.FullName(), err)
