@@ -21,6 +21,7 @@ clean::  ## Remove generated files
 .PHONY: all check-uptodate ci clean
 
 # --- Build --------------------------------------------------------------------
+GO_MODULE := $(shell go list -m)
 GO_LDFLAGS = -X main.version=$(VERSION)
 CMDS = . ./internal/cmd/client ./internal/cmd/server
 
@@ -71,7 +72,7 @@ lint:  ## Lint go source code
 .PHONY: lint
 
 # --- Protos ---------------------------------------------------------------------
-PROTOFILES = $(shell find proto -name google -prune -o -regex '.*/[^_][^/]*\.proto' -print | LANG=C sort)
+PROTOFILES = $(shell find proto -regex '.*/[^_][^/]*\.proto' -print | LANG=C sort)
 
 lint-proto:  ## Lint *.proto files
 	buf lint proto
@@ -87,11 +88,17 @@ proto:  ## Generate Go pb and grpc bindings and FileDescritor set for .proto fil
 define GENPROTO
 	protoc \
 		-I proto \
-		--descriptor_set_out=$(PROTO:proto/%.proto=pb/%.pb) --include_imports \
-		--go_out=paths=source_relative:pb \
-		--go-grpc_out=paths=source_relative:pb \
+		$(GENPROTO_PB_FLAGS) \
+		$(if $(SHOULD_GEN_GO),$(GENPROTO_GO_FLAGS)) \
 		$(PROTO)
 endef
+
+# Only generate Go bindings if the proto file declares a go_package that
+# starts with our module prefix. SHOULD_GEN_GO will be a non-empty string
+# in this case.
+SHOULD_GEN_GO = $(shell grep -l '^option go_package = "$(GO_MODULE)[/"]' $(PROTO))
+GENPROTO_GO_FLAGS = --go_out=paths=source_relative:pb --go-grpc_out=paths=source_relative:pb
+GENPROTO_PB_FLAGS = --descriptor_set_out=$(PROTO:proto/%.proto=pb/%.pb) --include_imports
 
 # --- Release -------------------------------------------------------------------
 release: nexttag  ## Tag and release binaries for different OS on GitHub release
