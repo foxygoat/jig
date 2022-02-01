@@ -11,13 +11,13 @@ import (
 	"strings"
 
 	"foxygo.at/jig/reflection"
+	"foxygo.at/jig/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -40,9 +40,8 @@ func WithLogger(logger Logger) Option {
 
 type Server struct {
 	log       Logger
-	methods   map[string]method
 	gs        *grpc.Server
-	files     *protoregistry.Files
+	files     *registry.Files
 	fs        fs.FS
 	protosets []string
 	eval      Evaluator
@@ -54,7 +53,7 @@ var errUnknownHandler = errors.New("Unknown handler")
 // data Directories.
 func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	s := &Server{
-		files: new(protoregistry.Files),
+		files: new(registry.Files),
 		log:   NewLogger(os.Stderr, LogLevelError),
 		eval:  eval,
 		fs:    vfs,
@@ -64,7 +63,7 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 			return nil, err
 		}
 	}
-	if err := s.loadMethods(); err != nil {
+	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -75,7 +74,7 @@ func (s *Server) Serve(lis net.Listener) error {
 		grpc.StreamInterceptor(s.intercept),
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
-	reflection.NewService(s.files).Register(s.gs)
+	reflection.NewService(&s.files.Files).Register(s.gs)
 	return s.gs.Serve(lis)
 }
 
@@ -91,26 +90,6 @@ func (s *Server) Stop() {
 	if s.gs != nil {
 		s.gs.GracefulStop()
 	}
-}
-
-func (s *Server) loadMethods() error {
-	if err := s.loadProtosets(); err != nil {
-		return err
-	}
-
-	s.methods = make(map[string]method)
-	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		sds := fd.Services()
-		for i := 0; i < sds.Len(); i++ {
-			mds := sds.Get(i).Methods()
-			for j := 0; j < mds.Len(); j++ {
-				m := newMethod(mds.Get(j), s.fs, s.eval)
-				s.methods[m.fullMethod()] = m
-			}
-		}
-		return true
-	})
-	return nil
 }
 
 func (s *Server) loadProtosets() error {
@@ -134,6 +113,7 @@ func (s *Server) loadProtosets() error {
 		if strings.HasPrefix(match, "_") {
 			continue
 		}
+		s.log.Debugf("loading discovered protoset file: %s", match)
 		b, err := fs.ReadFile(s.fs, match)
 		if err != nil {
 			return err
@@ -169,6 +149,18 @@ func (s *Server) addFiles(b []byte, seen map[string]bool) error {
 	return nil
 }
 
+func (s *Server) lookupMethod(name protoreflect.FullName) protoreflect.MethodDescriptor {
+	desc, err := s.files.FindDescriptorByName(name)
+	if err != nil {
+		return nil
+	}
+	md, ok := desc.(protoreflect.MethodDescriptor)
+	if !ok {
+		return nil
+	}
+	return md
+}
+
 func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	s.log.Debugf("%s: new request", info.FullMethod)
 	// If the handler returns anything except errUnknownHandler, then we
@@ -181,13 +173,15 @@ func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.Str
 		return err
 	}
 
-	method, ok := s.methods[info.FullMethod]
-	if !ok {
-		s.log.Warnf("%s: method not found", info.FullMethod)
-		return status.Errorf(codes.Unimplemented, "method not found: %s", info.FullMethod)
+	// Convert /pkg.service/method -> pkg.service.method
+	fullMethod := protoreflect.FullName(strings.ReplaceAll(info.FullMethod[1:], "/", "."))
+	md := s.lookupMethod(fullMethod)
+	if md == nil {
+		s.log.Warnf("%s: method not found", fullMethod)
+		return status.Errorf(codes.Unimplemented, "method not found: %s", fullMethod)
 	}
 
-	err := method.call(ss)
+	err := s.callMethod(md, ss)
 	if err != nil {
 		s.log.Errorf("%s: %s", info.FullMethod, err)
 	}
