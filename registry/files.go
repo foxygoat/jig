@@ -5,6 +5,8 @@
 package registry
 
 import (
+	"strings"
+
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
@@ -20,10 +22,23 @@ func NewFiles(f *protoregistry.Files) *Files {
 
 type extMatchFn func(protoreflect.ExtensionDescriptor) bool
 
+// extensionContainer is implemented by FileDescriptor and MessageDescriptor.
+// They are both "namespaces" that contain extensions and have "sub-namespaces".
+type extensionContainer interface {
+	Messages() protoreflect.MessageDescriptors
+	Extensions() protoreflect.ExtensionDescriptors
+}
+
 func (f *Files) FindExtensionByName(field protoreflect.FullName) (protoreflect.ExtensionType, error) {
-	return findExtension(&f.Files, func(ed protoreflect.ExtensionDescriptor) bool {
-		return ed.FullName() == field
-	})
+	desc, err := f.FindDescriptorByName(field)
+	if err != nil {
+		return nil, err
+	}
+	ed, ok := desc.(protoreflect.ExtensionDescriptor)
+	if !ok {
+		return nil, protoregistry.NotFound
+	}
+	return dynamicpb.NewExtensionType(ed), nil
 }
 
 func (f *Files) FindExtensionByNumber(message protoreflect.FullName, field protoreflect.FieldNumber) (protoreflect.ExtensionType, error) {
@@ -50,55 +65,52 @@ func walkExtensions(files *protoregistry.Files, getAll bool, pred extMatchFn) []
 	var result []protoreflect.ExtensionType
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		result = append(result, rangeExtensions(fd.Extensions(), getAll, pred)...)
-		if len(result) > 0 && !getAll {
-			return false // stop after the first found
-		}
-		result = append(result, rangeMessages(fd.Messages(), getAll, pred)...)
-		if len(result) > 0 && !getAll {
-			return false // stop after the first found
-		}
-		return true
+		result = append(result, getExtensions(fd, getAll, pred)...)
+		// continue if we are getting all extensions or have none so far
+		return getAll || len(result) == 0
 	})
 	return result
 }
 
-func rangeExtensions(eds protoreflect.ExtensionDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
+func getExtensions(ec extensionContainer, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
 	var result []protoreflect.ExtensionType
 
-	for i := 0; i < eds.Len(); i++ {
+	eds := ec.Extensions()
+	for i := 0; i < eds.Len() && (getAll || len(result) == 0); i++ {
 		ed := eds.Get(i)
 		if pred(ed) {
 			result = append(result, dynamicpb.NewExtensionType(ed))
-			if !getAll {
-				break
-			}
 		}
 	}
-	return result
-}
 
-func rangeMessages(mds protoreflect.MessageDescriptors, getAll bool, pred extMatchFn) []protoreflect.ExtensionType {
-	var result []protoreflect.ExtensionType
-
-	for i := 0; i < mds.Len(); i++ {
+	mds := ec.Messages()
+	for i := 0; i < mds.Len() && (getAll || len(result) == 0); i++ {
 		md := mds.Get(i)
-		result = append(result, rangeExtensions(md.Extensions(), getAll, pred)...)
-		if len(result) > 0 && !getAll {
-			break
-		}
-		result = append(result, rangeMessages(md.Messages(), getAll, pred)...)
-		if len(result) > 0 && !getAll {
-			break
-		}
+		result = append(result, getExtensions(md, getAll, pred)...)
 	}
+
 	return result
 }
 
-func (f *Files) FindMessageByName(message protoreflect.FullName) (protoreflect.MessageType, error) {
-	return nil, protoregistry.NotFound
+func (f *Files) FindMessageByName(name protoreflect.FullName) (protoreflect.MessageType, error) {
+	desc, err := f.FindDescriptorByName(name)
+	if err != nil {
+		return nil, err
+	}
+	md, ok := desc.(protoreflect.MessageDescriptor)
+	if !ok {
+		return nil, protoregistry.NotFound
+	}
+	return dynamicpb.NewMessageType(md), nil
 }
 
 func (f *Files) FindMessageByURL(url string) (protoreflect.MessageType, error) {
-	return nil, protoregistry.NotFound
+	message := protoreflect.FullName(url)
+	// Strip off before the last slash - we only look locally for the
+	// message and do not hit the network. The part after the last slash
+	// must be the full name of the message.
+	if i := strings.LastIndexByte(url, '/'); i >= 0 {
+		message = message[i+len("/"):]
+	}
+	return f.FindMessageByName(message)
 }
