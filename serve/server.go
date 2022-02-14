@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 
 	"foxygo.at/jig/reflection"
 	"foxygo.at/jig/registry"
+	"foxygo.at/jig/serve/httprule"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -39,12 +43,13 @@ func WithLogger(logger Logger) Option {
 }
 
 type Server struct {
-	log       Logger
-	gs        *grpc.Server
-	files     *registry.Files
-	fs        fs.FS
-	protosets []string
-	eval      Evaluator
+	log         Logger
+	gs          *grpc.Server
+	files       *registry.Files
+	httpMethods []*httpMethod
+	fs          fs.FS
+	protosets   []string
+	eval        Evaluator
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
@@ -66,6 +71,9 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
+	if err := s.loadHTTPRules(); err != nil {
+		return nil, err
+	}
 	return s, nil
 }
 
@@ -75,7 +83,17 @@ func (s *Server) Serve(lis net.Listener) error {
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
 	reflection.NewService(&s.files.Files).Register(s.gs)
-	return s.gs.Serve(lis)
+	return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, method := range s.httpMethods {
+		if vars := httprule.MatchRequest(method.rule, r); vars != nil {
+			s.serveHTTPMethod(method, vars, w, r)
+			return
+		}
+	}
+	s.gs.ServeHTTP(w, r)
 }
 
 func (s *Server) ListenAndServe(listenAddr string) error {
@@ -83,6 +101,7 @@ func (s *Server) ListenAndServe(listenAddr string) error {
 	if err != nil {
 		return err
 	}
+	s.log.Infof("Listening on %s", listenAddr)
 	return s.Serve(l)
 }
 
