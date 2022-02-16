@@ -1,4 +1,4 @@
-package serve
+package httprule
 
 import (
 	context "context"
@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"sync"
 
-	"foxygo.at/jig/serve/httprule"
+	"foxygo.at/jig/registry"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -22,10 +22,34 @@ type httpMethod struct {
 	rule *annotations.HttpRule
 }
 
+type HandleForwardedGRPCRequest func(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error
+
+// Server serves protobuf methods, annotated using httprule options, over HTTP.
+type Server struct {
+	httpMethods []*httpMethod
+	grpcHandler HandleForwardedGRPCRequest
+}
+
+func NewServer(files *registry.Files, handler HandleForwardedGRPCRequest) *Server {
+	return &Server{
+		httpMethods: loadHTTPRules(files),
+		grpcHandler: handler,
+	}
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, method := range s.httpMethods {
+		if vars := MatchRequest(method.rule, r); vars != nil {
+			s.serveHTTPMethod(method, vars, w, r)
+			return
+		}
+	}
+}
+
 // Serve a google.api.http annotated method as HTTP
 func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.ResponseWriter, r *http.Request) {
 	// TODO: Handle streaming calls.
-	if err := s.callMethod(m.desc, &serverStream{
+	if err := s.grpcHandler(m.desc, &serverStream{
 		req:        r,
 		respWriter: w,
 		rule:       m.rule,
@@ -38,23 +62,24 @@ func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.R
 	}
 }
 
-func (s *Server) loadHTTPRules() error {
-	s.files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+func loadHTTPRules(files *registry.Files) []*httpMethod {
+	var httpMethods []*httpMethod
+	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		sds := fd.Services()
 		for i := 0; i < sds.Len(); i++ {
 			mds := sds.Get(i).Methods()
 			for j := 0; j < mds.Len(); j++ {
 				md := mds.Get(j)
-				rules := httprule.Collect(md)
+				rules := Collect(md)
 				for _, r := range rules {
 					m := &httpMethod{desc: md, rule: r}
-					s.httpMethods = append(s.httpMethods, m)
+					httpMethods = append(httpMethods, m)
 				}
 			}
 		}
 		return true
 	})
-	return nil
+	return httpMethods
 }
 
 type serverStream struct {
@@ -103,7 +128,7 @@ func (s *serverStream) SendMsg(m interface{}) error {
 		// TODO: Send headers
 	})
 
-	mediaType := httprule.ContentTypeJSON
+	mediaType := ContentTypeJSON
 	var err error
 	accept := s.req.Header.Get("Accept")
 	if accept != "" {
@@ -114,9 +139,9 @@ func (s *serverStream) SendMsg(m interface{}) error {
 	}
 	var marshal func(m proto.Message) ([]byte, error)
 	switch mediaType {
-	case httprule.ContentTypeBinaryProto:
+	case ContentTypeBinaryProto:
 		marshal = proto.Marshal
-	case httprule.ContentTypeJSON:
+	case ContentTypeJSON:
 		marshal = protojson.Marshal
 	default:
 		return fmt.Errorf("invalid content type %s", accept)
@@ -132,7 +157,7 @@ func (s *serverStream) SendMsg(m interface{}) error {
 
 func (s *serverStream) RecvMsg(m interface{}) error {
 	pb := m.(*dynamicpb.Message)
-	return httprule.DecodeRequest(s.rule, s.vars, s.req, pb)
+	return DecodeRequest(s.rule, s.vars, s.req, pb)
 }
 
 var _ grpc.ServerStream = &serverStream{}

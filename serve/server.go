@@ -43,13 +43,13 @@ func WithLogger(logger Logger) Option {
 }
 
 type Server struct {
-	log         Logger
-	gs          *grpc.Server
-	files       *registry.Files
-	httpMethods []*httpMethod
-	fs          fs.FS
-	protosets   []string
-	eval        Evaluator
+	log       Logger
+	gs        *grpc.Server
+	http      *httprule.Server
+	files     *registry.Files
+	fs        fs.FS
+	protosets []string
+	eval      Evaluator
 }
 
 var errUnknownHandler = errors.New("Unknown handler")
@@ -71,9 +71,7 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
-	if err := s.loadHTTPRules(); err != nil {
-		return nil, err
-	}
+	s.http = httprule.NewServer(s.files, s.callMethod)
 	return s, nil
 }
 
@@ -91,12 +89,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.gs.ServeHTTP(w, r)
 		return
 	}
-	for _, method := range s.httpMethods {
-		if vars := httprule.MatchRequest(method.rule, r); vars != nil {
-			s.serveHTTPMethod(method, vars, w, r)
-			return
-		}
-	}
+	s.http.ServeHTTP(w, r)
 }
 
 func (s *Server) ListenAndServe(listenAddr string) error {
