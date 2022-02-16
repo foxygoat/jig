@@ -1,16 +1,18 @@
 package serve
 
 import (
-	"bytes"
 	context "context"
+	"fmt"
+	"mime"
 	"net/http"
 	"sync"
 
 	"foxygo.at/jig/serve/httprule"
-	"github.com/golang/protobuf/jsonpb"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
@@ -100,21 +102,37 @@ func (s *serverStream) SendMsg(m interface{}) error {
 	s.once.Do(func() {
 		// TODO: Send headers
 	})
-	buf := bytes.NewBuffer(nil)
-	if err := (&jsonpb.Marshaler{}).Marshal(buf, m.(*dynamicpb.Message)); err != nil {
+
+	mediaType := httprule.ContentTypeJSON
+	var err error
+	accept := s.req.Header.Get("Accept")
+	if accept != "" {
+		mediaType, _, err = mime.ParseMediaType(accept)
+		if err != nil {
+			return err
+		}
+	}
+	var marshal func(m proto.Message) ([]byte, error)
+	switch mediaType {
+	case httprule.ContentTypeBinaryProto:
+		marshal = proto.Marshal
+	case httprule.ContentTypeJSON:
+		marshal = protojson.Marshal
+	default:
+		return fmt.Errorf("invalid content type %s", accept)
+	}
+
+	buf, err := marshal(m.(*dynamicpb.Message))
+	if err != nil {
 		return err
 	}
-	_, err := s.respWriter.Write(buf.Bytes())
+	_, err = s.respWriter.Write(buf)
 	return err
 }
 
 func (s *serverStream) RecvMsg(m interface{}) error {
 	pb := m.(*dynamicpb.Message)
-	err := httprule.DecodeRequest(s.rule, s.vars, s.req, pb)
-	if err != nil {
-		return err
-	}
-	return jsonpb.Unmarshal(s.req.Body, pb)
+	return httprule.DecodeRequest(s.rule, s.vars, s.req, pb)
 }
 
 var _ grpc.ServerStream = &serverStream{}

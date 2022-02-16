@@ -87,13 +87,16 @@ func (s *Server) Serve(lis net.Listener) error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+		s.gs.ServeHTTP(w, r)
+		return
+	}
 	for _, method := range s.httpMethods {
 		if vars := httprule.MatchRequest(method.rule, r); vars != nil {
 			s.serveHTTPMethod(method, vars, w, r)
 			return
 		}
 	}
-	s.gs.ServeHTTP(w, r)
 }
 
 func (s *Server) ListenAndServe(listenAddr string) error {

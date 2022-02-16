@@ -33,20 +33,20 @@ func TestGreeterSample(t *testing.T) {
 	out := &bytes.Buffer{}
 
 	unaryWant := `
-Header: map[content-type:[application/grpc]]
+Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [unary]: Hello 🌏
 Trailer: map[]`
 	clientWant := `
-Header: map[content-type:[application/grpc] count:[3]]
+Header: map[content-type:[application/grpc] count:[3] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [client]: Hello 1 and 2 and 3
 Trailer: map[size:[35]]`
 	serverWant := `
-Header: map[content-type:[application/grpc]]
+Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [server]: Hello Stranger
 Greeting: 💃 jig [server]: Goodbye Stranger
 Trailer: map[]`
 	bidiWant := `
-Header: map[content-type:[application/grpc]]
+Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [bidi]: Hello a b c
 Trailer: map[]`
 
@@ -87,19 +87,19 @@ func TestGreeterSampleStatus(t *testing.T) {
 	out := &bytes.Buffer{}
 
 	unaryWant := `
-Header: map[content-type:[application/grpc] eat:[my shorts]]
+Header: map[content-type:[application/grpc] eat:[my shorts] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Trailer: map[a:[cow] dont:[have]]`
 	unaryErrWant := `
 rpc error: code = InvalidArgument desc = 💃 jig [unary]: eat my shorts
 seconds:42
 [google.api.http]:{post:"/api/greet/hello"}`
 	bidiWant := `
-Header: map[content-type:[application/grpc]]
+Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [bidi]: Hello 1
 Trailer: map[]`
 	bidiErrWant := " rpc error: code = Unknown desc = transport: the stream is done or WriteHeader was already called"
 	bidiWant2 := `
-Header: map[content-type:[application/grpc] eat:[his shorts]]
+Header: map[content-type:[application/grpc] eat:[his shorts] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Trailer: map[]`
 	bidiErrWant2 := " rpc error: code = InvalidArgument desc = 💃 jig [bidi]: eat my shorts"
 	tests := map[string]testCaseStatus{
@@ -136,7 +136,7 @@ func TestGreeterEmbedFS(t *testing.T) {
 
 	out := &bytes.Buffer{}
 
-	want := `Header: map[content-type:[application/grpc]]
+	want := `Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
 Greeting: 💃 jig [unary]: Hello 🌏
 Trailer: map[]
 `

@@ -2,6 +2,8 @@ package httprule
 
 import (
 	"fmt"
+	"io/ioutil"
+	"mime"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -9,6 +11,7 @@ import (
 	"strings"
 
 	"google.golang.org/genproto/googleapis/api/annotations"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
@@ -36,8 +39,17 @@ func MatchRequest(rule *annotations.HttpRule, req *http.Request) map[string]stri
 	return matchPath(pattern, req.URL.Path)
 }
 
+const (
+	ContentTypeBinaryProto = "application/x-protobuf"
+	ContentTypeJSON        = "application/json"
+)
+
 // DecodeRequest parses a http.Request, using a HttpRule, into a target message.
 func DecodeRequest(rule *annotations.HttpRule, pathVars map[string]string, req *http.Request, target proto.Message) error {
+	if err := decodeBody(rule, req, target); err != nil {
+		return err
+	}
+
 	tb := target.ProtoReflect()
 	// First set fields from path vars.
 	for key, value := range pathVars {
@@ -45,6 +57,43 @@ func DecodeRequest(rule *annotations.HttpRule, pathVars map[string]string, req *
 			return fmt.Errorf("%s: field %s: %w", tb.Descriptor().FullName(), key, err)
 		}
 	}
+
+	return nil
+}
+
+func decodeBody(rule *annotations.HttpRule, req *http.Request, target proto.Message) error {
+	if rule.Body != "*" {
+		// If body isn't set, the request body is dropped.
+		// TODO: Support field paths other than "*".
+		return nil
+	}
+	mediaType := ContentTypeJSON
+	contentType := req.Header.Get("Content-Type")
+	var err error
+	if contentType != "" {
+		mediaType, _, err = mime.ParseMediaType(contentType)
+		if err != nil {
+			return err
+		}
+	}
+	var unmarshal func(b []byte, m proto.Message) error
+	switch mediaType {
+	case ContentTypeBinaryProto:
+		unmarshal = proto.Unmarshal
+	case ContentTypeJSON:
+		unmarshal = protojson.Unmarshal
+	default:
+		return fmt.Errorf("invalid content type %s", contentType)
+	}
+
+	raw, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+	if err = unmarshal(raw, target); err != nil {
+		return err
+	}
+
 	return nil
 }
 
