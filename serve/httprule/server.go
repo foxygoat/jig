@@ -1,7 +1,7 @@
 package httprule
 
 import (
-	context "context"
+	"context"
 	"fmt"
 	"mime"
 	"net/http"
@@ -93,6 +93,8 @@ type serverStream struct {
 	vars       map[string]string
 }
 
+var _ grpc.ServerStream = &serverStream{}
+
 func (s *serverStream) SetHeader(md metadata.MD) error {
 	if md.Len() == 0 {
 		return nil
@@ -116,10 +118,10 @@ func (s *serverStream) SetTrailer(md metadata.MD) {
 	s.mu.Lock()
 	s.trailer = metadata.Join(s.trailer, md)
 	s.mu.Unlock()
-	return
 }
 
 func (s *serverStream) Context() context.Context {
+	// TODO: Propagate metadata to headers.
 	return s.req.Context()
 }
 
@@ -130,8 +132,9 @@ func (s *serverStream) SendMsg(m interface{}) error {
 
 	mediaType := ContentTypeJSON
 	var err error
+	// TODO: There's a lot more to parsing Accept headers...
 	accept := s.req.Header.Get("Accept")
-	if accept != "" {
+	if accept != "" && accept != "*/*" {
 		mediaType, _, err = mime.ParseMediaType(accept)
 		if err != nil {
 			return err
@@ -159,5 +162,3 @@ func (s *serverStream) RecvMsg(m interface{}) error {
 	pb := m.(*dynamicpb.Message)
 	return DecodeRequest(s.rule, s.vars, s.req, pb)
 }
-
-var _ grpc.ServerStream = &serverStream{}

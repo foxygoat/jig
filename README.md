@@ -126,6 +126,14 @@ To see streaming, call it with:
     client --stream=client you me world
     client --stream=bidi you me world
 
+To call over HTTP, call it with:
+
+    curl \
+        -H "Content-Type: application/json" \
+        -H "Accept: application/json" \
+        -d '{"firstName": "Kitty"}' \
+        localhost:8080/api/greet/hello
+
 Experiment with the jsonnet method files in the [testdata](./testdata)
 directory.
 

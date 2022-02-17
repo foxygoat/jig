@@ -34,7 +34,7 @@ func NewHttpGreeterClient(cc grpc.ClientConnInterface) HttpGreeterClient {
 
 func (c *httpGreeterClient) GetHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
 	out := new(HelloResponse)
-	err := c.cc.Invoke(ctx, "/greet.HttpGreeter/GetHello", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/httpgreet.HttpGreeter/GetHello", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (c *httpGreeterClient) GetHello(ctx context.Context, in *HelloRequest, opts
 
 func (c *httpGreeterClient) PostHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
 	out := new(HelloResponse)
-	err := c.cc.Invoke(ctx, "/greet.HttpGreeter/PostHello", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/httpgreet.HttpGreeter/PostHello", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (c *httpGreeterClient) PostHello(ctx context.Context, in *HelloRequest, opt
 
 func (c *httpGreeterClient) PostHelloURL(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
 	out := new(HelloResponse)
-	err := c.cc.Invoke(ctx, "/greet.HttpGreeter/PostHelloURL", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/httpgreet.HttpGreeter/PostHelloURL", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func _HttpGreeter_GetHello_Handler(srv interface{}, ctx context.Context, dec fun
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/greet.HttpGreeter/GetHello",
+		FullMethod: "/httpgreet.HttpGreeter/GetHello",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HttpGreeterServer).GetHello(ctx, req.(*HelloRequest))
@@ -124,7 +124,7 @@ func _HttpGreeter_PostHello_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/greet.HttpGreeter/PostHello",
+		FullMethod: "/httpgreet.HttpGreeter/PostHello",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HttpGreeterServer).PostHello(ctx, req.(*HelloRequest))
@@ -142,7 +142,7 @@ func _HttpGreeter_PostHelloURL_Handler(srv interface{}, ctx context.Context, dec
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/greet.HttpGreeter/PostHelloURL",
+		FullMethod: "/httpgreet.HttpGreeter/PostHelloURL",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(HttpGreeterServer).PostHelloURL(ctx, req.(*HelloRequest))
@@ -154,7 +154,7 @@ func _HttpGreeter_PostHelloURL_Handler(srv interface{}, ctx context.Context, dec
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var HttpGreeter_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "greet.HttpGreeter",
+	ServiceName: "httpgreet.HttpGreeter",
 	HandlerType: (*HttpGreeterServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

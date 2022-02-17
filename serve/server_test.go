@@ -165,6 +165,7 @@ func TestHTTP(t *testing.T) {
 
 		respPb := &greet.HelloResponse{}
 		raw, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, protojson.Unmarshal(raw, respPb))
 
@@ -181,6 +182,7 @@ func TestHTTP(t *testing.T) {
 
 		respPb := &greet.HelloResponse{}
 		raw, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, proto.Unmarshal(raw, respPb))
 

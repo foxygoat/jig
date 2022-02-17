@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package greet;
+package httpgreet;
 option go_package = "foxygo.at/jig/pb/httpgreet";
 import "google/api/annotations.proto";
 
