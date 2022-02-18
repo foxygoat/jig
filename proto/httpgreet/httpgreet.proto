@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package httpgreet;
+option go_package = "foxygo.at/jig/pb/httpgreet";
+import "google/api/annotations.proto";
+
+// Greeter service.
+service HttpGreeter {
+  // Hello greets.
+  rpc GetHello (HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = { get:"/api/greet/hello/{first_name}" };
+  };
+
+  rpc PostHello (HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = { post:"/api/greet/hello" body:"*" };
+  }
+
+  rpc PostHelloURL (HelloRequest) returns (HelloResponse) {
+    option (google.api.http) = { post:"/api/greet/{first_name}" body:"*" };
+  }
+}
+
+message HelloRequest {
+  string first_name = 1;
+  string last_name = 2;
+}
+
+message HelloResponse {
+  string greeting = 1;
+}

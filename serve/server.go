@@ -7,11 +7,15 @@ import (
 	"fmt"
 	"io/fs"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 
 	"foxygo.at/jig/reflection"
 	"foxygo.at/jig/registry"
+	"foxygo.at/jig/serve/httprule"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -41,6 +45,7 @@ func WithLogger(logger Logger) Option {
 type Server struct {
 	log       Logger
 	gs        *grpc.Server
+	http      *httprule.Server
 	files     *registry.Files
 	fs        fs.FS
 	protosets []string
@@ -66,6 +71,7 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
+	s.http = httprule.NewServer(s.files, s.callMethod)
 	return s, nil
 }
 
@@ -75,7 +81,15 @@ func (s *Server) Serve(lis net.Listener) error {
 		grpc.UnknownServiceHandler(unknownHandler),
 	)
 	reflection.NewService(&s.files.Files).Register(s.gs)
-	return s.gs.Serve(lis)
+	return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
+}
+
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+		s.gs.ServeHTTP(w, r)
+		return
+	}
+	s.http.ServeHTTP(w, r)
 }
 
 func (s *Server) ListenAndServe(listenAddr string) error {
@@ -83,6 +97,7 @@ func (s *Server) ListenAndServe(listenAddr string) error {
 	if err != nil {
 		return err
 	}
+	s.log.Infof("Listening on %s", listenAddr)
 	return s.Serve(l)
 }
 
