@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"foxygo.at/jig/internal/client"
+	"foxygo.at/jig/log"
 	"foxygo.at/jig/pb/greet"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -20,7 +21,7 @@ import (
 )
 
 func newTestServer() *TestServer {
-	withLogger := WithLogger(NewLogger(io.Discard, LogLevelError))
+	withLogger := WithLogger(log.NewLogger(io.Discard, log.LogLevelError))
 	return NewTestServer(JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 }
 
