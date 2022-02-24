@@ -16,6 +16,7 @@ import (
 	"foxygo.at/jig/log"
 	"foxygo.at/jig/pb/greet"
 	"github.com/stretchr/testify/require"
+	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -188,6 +189,26 @@ func TestHTTP(t *testing.T) {
 		require.NoError(t, proto.Unmarshal(raw, respPb))
 
 		expected := &greet.HelloResponse{Greeting: "💃 jig [unary]: Hello Stranger"}
+		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
+	})
+
+	t.Run("converts error responses to HTTP", func(t *testing.T) {
+		badRequestBody := `{"first_name": "Bart"}`
+		req, err := http.NewRequest("POST", url, strings.NewReader(badRequestBody))
+		require.NoError(t, err)
+		req.Header.Set("Accept", "application/json; charset=utf-8")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		respPb := &statuspb.Status{}
+		raw, err := ioutil.ReadAll(resp.Body)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.NoError(t, protojson.Unmarshal(raw, respPb))
+
+		respPb.Details = nil
+		expected := &statuspb.Status{Code: 3, Message: "💃 jig [unary]: eat my shorts"}
 		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
 	})
 }

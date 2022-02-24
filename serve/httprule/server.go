@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
-	"sync"
+	"os"
 
+	"foxygo.at/jig/log"
 	"foxygo.at/jig/registry"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -28,12 +30,14 @@ type HandleForwardedGRPCRequest func(md protoreflect.MethodDescriptor, ss grpc.S
 type Server struct {
 	httpMethods []*httpMethod
 	grpcHandler HandleForwardedGRPCRequest
+	log         log.Logger
 }
 
 func NewServer(files *registry.Files, handler HandleForwardedGRPCRequest) *Server {
 	return &Server{
 		httpMethods: loadHTTPRules(files),
 		grpcHandler: handler,
+		log:         log.NewLogger(os.Stderr, log.LogLevelError),
 	}
 }
 
@@ -49,17 +53,18 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Serve a google.api.http annotated method as HTTP
 func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.ResponseWriter, r *http.Request) {
 	// TODO: Handle streaming calls.
-	if err := s.grpcHandler(m.desc, &serverStream{
+	ss := &serverStream{
 		req:        r,
 		respWriter: w,
 		rule:       m.rule,
 		vars:       vars,
-	}); err != nil {
-		// TODO: Translate gRPC response codes.
-		w.WriteHeader(500)
-		_, _ = w.Write([]byte(err.Error()))
+		log:        s.log,
+	}
+	if err := s.grpcHandler(m.desc, ss); err != nil {
+		ss.writeError(err)
 		return
 	}
+	ss.writeResp()
 }
 
 func loadHTTPRules(files *registry.Files) []*httpMethod {
@@ -83,14 +88,15 @@ func loadHTTPRules(files *registry.Files) []*httpMethod {
 }
 
 type serverStream struct {
-	mu         sync.Mutex
-	once       sync.Once
 	header     metadata.MD
 	trailer    metadata.MD
 	req        *http.Request
 	respWriter http.ResponseWriter
 	rule       *annotations.HttpRule
 	vars       map[string]string
+	acceptType string
+	resp       proto.Message
+	log        log.Logger
 }
 
 var _ grpc.ServerStream = &serverStream{}
@@ -100,9 +106,7 @@ func (s *serverStream) SetHeader(md metadata.MD) error {
 		return nil
 	}
 
-	s.mu.Lock()
 	s.header = metadata.Join(s.header, md)
-	s.mu.Unlock()
 	return nil
 }
 
@@ -115,9 +119,7 @@ func (s *serverStream) SetTrailer(md metadata.MD) {
 		return
 	}
 
-	s.mu.Lock()
 	s.trailer = metadata.Join(s.trailer, md)
-	s.mu.Unlock()
 }
 
 func (s *serverStream) Context() context.Context {
@@ -126,39 +128,89 @@ func (s *serverStream) Context() context.Context {
 }
 
 func (s *serverStream) SendMsg(m interface{}) error {
-	s.once.Do(func() {
-		// TODO: Send headers
-	})
-
-	mediaType := ContentTypeJSON
-	var err error
-	// TODO: There's a lot more to parsing Accept headers...
-	accept := s.req.Header.Get("Accept")
-	if accept != "" && accept != "*/*" {
-		mediaType, _, err = mime.ParseMediaType(accept)
-		if err != nil {
-			return err
-		}
+	// Message is buffered until the RPC returns since we don't support client streaming... yet.
+	if s.resp != nil {
+		panic("only one response expected!")
 	}
-	var marshal func(m proto.Message) ([]byte, error)
-	switch mediaType {
-	case ContentTypeBinaryProto:
-		marshal = proto.Marshal
-	case ContentTypeJSON:
-		marshal = protojson.Marshal
-	default:
-		return fmt.Errorf("invalid content type %s", accept)
-	}
-
-	buf, err := marshal(m.(*dynamicpb.Message))
-	if err != nil {
-		return err
-	}
-	_, err = s.respWriter.Write(buf)
-	return err
+	s.resp = m.(proto.Message)
+	return nil
 }
 
 func (s *serverStream) RecvMsg(m interface{}) error {
+	var err error
+	s.acceptType, err = getAcceptType(s.req)
+	if err != nil {
+		return err
+	}
+
 	pb := m.(*dynamicpb.Message)
 	return DecodeRequest(s.rule, s.vars, s.req, pb)
+}
+
+func (s *serverStream) writeResp() {
+	// TODO: forward headers and trailers.
+	msg, err := marshalerForContentType(s.acceptType)(s.resp)
+	if err != nil {
+		s.writeError(err)
+		return
+	}
+	if _, err = s.respWriter.Write(msg); err != nil {
+		s.log.Errorf("failed to write response")
+		return
+	}
+}
+
+func (s *serverStream) writeError(err error) {
+	// Fallback message if error marshalling fails.
+	const errMarshalFailed = `{"code": 13, "message": "failed to marshal error message"}`
+
+	w := s.respWriter
+	st := status.Convert(err)
+	// If we don't understand the "Accept" header, error back in JSON without setting Content-Type.
+	marshaler := protojson.Marshal
+	if s.acceptType != "" {
+		marshaler = marshalerForContentType(s.acceptType)
+		w.Header().Set("Content-Type", s.acceptType)
+	}
+
+	buf, err := marshaler(st.Proto())
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		if _, err = w.Write([]byte(errMarshalFailed)); err != nil {
+			s.log.Errorf("failed to write error response: %+v", err)
+		}
+		return
+	}
+	s.respWriter.WriteHeader(HTTPStatusFromCode(st.Code()))
+	if _, err = s.respWriter.Write(buf); err != nil {
+		s.log.Errorf("failed to write error response: %+v", err)
+	}
+}
+
+func getAcceptType(r *http.Request) (string, error) {
+	var err error
+	mediaType := ContentTypeJSON
+	// TODO: There's a lot more to parsing Accept headers...
+	accept := r.Header.Get("Accept")
+	if accept != "" && accept != "*/*" {
+		mediaType, _, err = mime.ParseMediaType(accept)
+		if err != nil {
+			return "", err
+		}
+	}
+	if mediaType != ContentTypeBinaryProto && mediaType != ContentTypeJSON {
+		return "", fmt.Errorf("invalid Accept content type %s", accept)
+	}
+	return mediaType, nil
+}
+
+func marshalerForContentType(mediaType string) func(m proto.Message) ([]byte, error) {
+	switch mediaType {
+	case ContentTypeBinaryProto:
+		return proto.Marshal
+	case ContentTypeJSON:
+		return protojson.Marshal
+	default:
+		panic("invalid content type")
+	}
 }
