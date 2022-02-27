@@ -3,7 +3,6 @@
 package serve
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"net"
@@ -53,8 +52,6 @@ type Server struct {
 	eval      Evaluator
 }
 
-var errUnknownHandler = errors.New("Unknown handler")
-
 // NewServer creates a new Server for given evaluator, e.g. Jsonnet and
 // data Directories.
 func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
@@ -77,10 +74,7 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 }
 
 func (s *Server) Serve(lis net.Listener) error {
-	s.gs = grpc.NewServer(
-		grpc.StreamInterceptor(s.intercept),
-		grpc.UnknownServiceHandler(unknownHandler),
-	)
+	s.gs = grpc.NewServer(grpc.UnknownServiceHandler(s.UnknownHandler))
 	reflection.NewService(&s.files.Files).Register(s.gs)
 	return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
 }
@@ -177,20 +171,26 @@ func (s *Server) lookupMethod(name protoreflect.FullName) protoreflect.MethodDes
 	return md
 }
 
-func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	s.log.Debugf("%s: new request", info.FullMethod)
-	// If the handler returns anything except errUnknownHandler, then we
-	// have intercepted a real method and we are done now. Otherwise we
-	// dispatch the method to the evaluator.
-	if err := handler(srv, ss); !errors.Is(err, errUnknownHandler) {
-		if err != nil {
-			s.log.Errorf("%s: %s", info.FullMethod, err)
-		}
-		return err
+// UnknownHandler handles gRPC requests that are not statically implemented.
+//
+// This is the main entrypoint of the jig server, being a dynamic gRPC server.
+// It implements grpc.StreamHandler, although it ignores the first argument as
+// that is the concrete implementation of the server, and for dynamic
+// implementations and the unknown handler, this is nil.
+//
+// It is expected that the context returned from ss.Context() can be used
+// with grpc.ServerTransportStreamFromContext() to return a
+// grpc.ServerTransportStream interface for its `Method()` method.
+func (s *Server) UnknownHandler(_ interface{}, ss grpc.ServerStream) error {
+	method, ok := grpc.Method(ss.Context())
+	if !ok {
+		return status.Errorf(codes.Internal, "no method in stream context")
 	}
 
+	s.log.Debugf("%s: new request", method)
+
 	// Convert /pkg.service/method -> pkg.service.method
-	fullMethod := protoreflect.FullName(strings.ReplaceAll(info.FullMethod[1:], "/", "."))
+	fullMethod := protoreflect.FullName(strings.ReplaceAll(method[1:], "/", "."))
 	md := s.lookupMethod(fullMethod)
 	if md == nil {
 		s.log.Warnf("%s: method not found", fullMethod)
@@ -199,16 +199,9 @@ func (s *Server) intercept(srv interface{}, ss grpc.ServerStream, info *grpc.Str
 
 	err := s.callMethod(md, ss)
 	if err != nil {
-		s.log.Errorf("%s: %s", info.FullMethod, err)
+		s.log.Errorf("%s: %s", method, err)
 	}
 	return err
-}
-
-// unknownHandler returns a sentinel error so the interceptor knows when
-// calling it that is intercepting an unknown method and should dispatch
-// it to the evaluator.
-func unknownHandler(_ interface{}, stream grpc.ServerStream) error {
-	return errUnknownHandler
 }
 
 type TestServer struct {
