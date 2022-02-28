@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 
+	"foxygo.at/jig/log"
 	"foxygo.at/jig/reflection"
 	"foxygo.at/jig/registry"
 	"foxygo.at/jig/serve/httprule"
@@ -35,7 +36,7 @@ func WithProtosets(protosets ...string) Option {
 	}
 }
 
-func WithLogger(logger Logger) Option {
+func WithLogger(logger log.Logger) Option {
 	return func(s *Server) error {
 		s.log = logger
 		return nil
@@ -43,7 +44,7 @@ func WithLogger(logger Logger) Option {
 }
 
 type Server struct {
-	log       Logger
+	log       log.Logger
 	gs        *grpc.Server
 	http      *httprule.Server
 	files     *registry.Files
@@ -59,7 +60,7 @@ var errUnknownHandler = errors.New("Unknown handler")
 func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	s := &Server{
 		files: new(registry.Files),
-		log:   NewLogger(os.Stderr, LogLevelError),
+		log:   log.NewLogger(os.Stderr, log.LogLevelError),
 		eval:  eval,
 		fs:    vfs,
 	}

@@ -4,6 +4,7 @@ import (
 	"os"
 
 	"foxygo.at/jig/bones"
+	"foxygo.at/jig/log"
 	"foxygo.at/jig/serve"
 	"github.com/alecthomas/kong"
 )
@@ -17,9 +18,9 @@ type config struct {
 }
 
 type cmdServe struct {
-	ProtoSet []string       `short:"p" help:"Protoset .pb files containing service and deps"`
-	LogLevel serve.LogLevel `help:"Server logging level" default:"error"`
-	Listen   string         `short:"l" default:"localhost:8080" help:"TCP listen address"`
+	ProtoSet []string     `short:"p" help:"Protoset .pb files containing service and deps"`
+	LogLevel log.LogLevel `help:"Server logging level" default:"error"`
+	Listen   string       `short:"l" default:"localhost:8080" help:"TCP listen address"`
 
 	Dirs []string `arg:"" help:"Directory containing method definitions and protoset .pb file"`
 }
@@ -42,7 +43,7 @@ func main() {
 }
 
 func (cs *cmdServe) Run() error {
-	withLogger := serve.WithLogger(serve.NewLogger(os.Stderr, cs.LogLevel))
+	withLogger := serve.WithLogger(log.NewLogger(os.Stderr, cs.LogLevel))
 	withProtosets := serve.WithProtosets(cs.ProtoSet...)
 	dirs := serve.NewFSFromDirs(cs.Dirs...)
 	s, err := serve.NewServer(serve.JsonnetEvaluator(), dirs, withLogger, withProtosets)
