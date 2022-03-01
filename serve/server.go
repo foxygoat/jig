@@ -43,10 +43,11 @@ func WithLogger(logger log.Logger) Option {
 }
 
 type Server struct {
+	Files *registry.Files
+
 	log       log.Logger
 	gs        *grpc.Server
 	http      *httprule.Server
-	files     *registry.Files
 	fs        fs.FS
 	protosets []string
 	eval      Evaluator
@@ -56,7 +57,7 @@ type Server struct {
 // data Directories.
 func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	s := &Server{
-		files: new(registry.Files),
+		Files: new(registry.Files),
 		log:   log.NewLogger(os.Stderr, log.LogLevelError),
 		eval:  eval,
 		fs:    vfs,
@@ -69,13 +70,13 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
-	s.http = httprule.NewServer(s.files, s.UnknownHandler)
+	s.http = httprule.NewServer(s.Files, s.UnknownHandler)
 	return s, nil
 }
 
 func (s *Server) Serve(lis net.Listener) error {
 	s.gs = grpc.NewServer(grpc.UnknownServiceHandler(s.UnknownHandler))
-	reflection.NewService(&s.files.Files).Register(s.gs)
+	reflection.NewService(&s.Files.Files).Register(s.gs)
 	return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
 }
 
@@ -150,7 +151,7 @@ func (s *Server) addFiles(b []byte, seen map[string]bool) error {
 		}
 		seen[fd.Path()] = true
 		s.log.Debugf("loading file descriptor %s", fd.Path())
-		err := s.files.RegisterFile(fd)
+		err := s.Files.RegisterFile(fd)
 		if err != nil {
 			s.log.Errorf("cannot register %q: %v", fd.FullName(), err)
 		}
@@ -160,7 +161,7 @@ func (s *Server) addFiles(b []byte, seen map[string]bool) error {
 }
 
 func (s *Server) lookupMethod(name protoreflect.FullName) protoreflect.MethodDescriptor {
-	desc, err := s.files.FindDescriptorByName(name)
+	desc, err := s.Files.FindDescriptorByName(name)
 	if err != nil {
 		return nil
 	}

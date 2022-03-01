@@ -34,12 +34,12 @@ func (s *Server) unaryClientCall(md protoreflect.MethodDescriptor, ss grpc.Serve
 		return err
 	}
 
-	input, err := makeInputJSON(req, mdata, s.files)
+	input, err := makeInputJSON(req, mdata, s.Files)
 	if err != nil {
 		return err
 	}
 
-	return s.evaluate(md, input, ss, s.files)
+	return s.evaluate(md, input, ss, s.Files)
 }
 
 func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -56,12 +56,12 @@ func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.S
 		stream = append(stream, msg)
 	}
 
-	input, err := makeStreamingInputJSON(stream, mdata, s.files)
+	input, err := makeStreamingInputJSON(stream, mdata, s.Files)
 	if err != nil {
 		return err
 	}
 
-	return s.evaluate(md, input, ss, s.files)
+	return s.evaluate(md, input, ss, s.Files)
 }
 
 func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -77,11 +77,11 @@ func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.Ser
 
 		// For bidirectional streaming, we call evaluator once for each message
 		// on the input stream and stream out the results.
-		input, err := makeInputJSON(msg, mdata, s.files)
+		input, err := makeInputJSON(msg, mdata, s.Files)
 		if err != nil {
 			return err
 		}
-		if err := s.evaluate(md, input, ss, s.files); err != nil {
+		if err := s.evaluate(md, input, ss, s.Files); err != nil {
 			return err
 		}
 	}
@@ -94,7 +94,7 @@ func (s *Server) evaluate(md protoreflect.MethodDescriptor, input string, ss grp
 		return err
 	}
 
-	result, err := parseOutputJSON(output, md, s.files)
+	result, err := parseOutputJSON(output, md, s.Files)
 	if err != nil {
 		return err
 	}
