@@ -69,7 +69,7 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
-	s.http = httprule.NewServer(s.files, s.callMethod)
+	s.http = httprule.NewServer(s.files, s.UnknownHandler)
 	return s, nil
 }
 
@@ -171,37 +171,48 @@ func (s *Server) lookupMethod(name protoreflect.FullName) protoreflect.MethodDes
 	return md
 }
 
-// UnknownHandler handles gRPC requests that are not statically implemented.
+// UnknownHandler handles gRPC method calls that are not statically
+// implemented. It is registered as the UnknownServiceHandler of the grpc
+// server.
 //
-// This is the main entrypoint of the jig server, being a dynamic gRPC server.
-// It implements grpc.StreamHandler, although it ignores the first argument as
-// that is the concrete implementation of the server, and for dynamic
-// implementations and the unknown handler, this is nil.
+// UnknownHandler can be called from a non-grpc.Server entry point, possibly a
+// HTTP server or even an internal dispatch bypassing the network. In order for
+// this handler to know which method is being invoked, the `srv` argument can
+// be (ab)used to pass the full name of the method. In this case the dynamic
+// type of `srv` must be `protoreflect.FullName` and it must contain the
+// fully-qualified method name (pkg.service.method).
 //
-// It is expected that the context returned from ss.Context() can be used
-// with grpc.ServerTransportStreamFromContext() to return a
-// grpc.ServerTransportStream interface for its `Method()` method.
-func (s *Server) UnknownHandler(_ interface{}, ss grpc.ServerStream) error {
-	method, ok := grpc.Method(ss.Context())
-	if !ok {
-		return status.Errorf(codes.Internal, "no method in stream context")
+// Alternatively, the stream context (ss.Context()) must contain a
+// grpc.ServerTransportStream, retrievable with
+// grpc.ServerTransportStreamFromContext(), on which the `Method()` method will
+// be called to find the method name. This should return the method as a HTTP
+// path (/pkg.service/method), as is done by grpc.Server.
+func (s *Server) UnknownHandler(srv interface{}, ss grpc.ServerStream) error {
+	var fullMethod protoreflect.FullName
+	var ok bool
+	if fullMethod, ok = srv.(protoreflect.FullName); !ok {
+		methodPath, ok := grpc.Method(ss.Context())
+		if !ok {
+			return status.Errorf(codes.Internal, "no method in stream context")
+		}
+		// Convert /pkg.service/method -> pkg.service.method
+		fullMethod = protoreflect.FullName(strings.ReplaceAll(methodPath[1:], "/", "."))
 	}
 
-	s.log.Debugf("%s: new request", method)
+	s.log.Debugf("%s: new request", fullMethod)
 
-	// Convert /pkg.service/method -> pkg.service.method
-	fullMethod := protoreflect.FullName(strings.ReplaceAll(method[1:], "/", "."))
 	md := s.lookupMethod(fullMethod)
 	if md == nil {
 		s.log.Warnf("%s: method not found", fullMethod)
 		return status.Errorf(codes.Unimplemented, "method not found: %s", fullMethod)
 	}
 
-	err := s.callMethod(md, ss)
-	if err != nil {
-		s.log.Errorf("%s: %s", method, err)
+	if err := s.callMethod(md, ss); err != nil {
+		s.log.Errorf("%s: %s", fullMethod, err)
+		return err
 	}
-	return err
+
+	return nil
 }
 
 type TestServer struct {
