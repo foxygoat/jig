@@ -13,7 +13,6 @@ import (
 	"foxygo.at/jig/log"
 	"foxygo.at/jig/reflection"
 	"foxygo.at/jig/registry"
-	"foxygo.at/jig/serve/httprule"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
@@ -47,7 +46,7 @@ type Server struct {
 
 	log       log.Logger
 	gs        *grpc.Server
-	http      *httprule.Server
+	http      http.Handler
 	fs        fs.FS
 	protosets []string
 	eval      Evaluator
@@ -70,14 +69,22 @@ func NewServer(eval Evaluator, vfs fs.FS, options ...Option) (*Server, error) {
 	if err := s.loadProtosets(); err != nil {
 		return nil, err
 	}
-	s.http = httprule.NewServer(s.Files, s.UnknownHandler)
 	return s, nil
+}
+
+// SetHTTPHandler sets a http.Handler to be called for non-grpc traffic.
+// It must be called before Serve or ListenAndServe are called.
+func (s *Server) SetHTTPHandler(handler http.Handler) {
+	s.http = handler
 }
 
 func (s *Server) Serve(lis net.Listener) error {
 	s.gs = grpc.NewServer(grpc.UnknownServiceHandler(s.UnknownHandler))
 	reflection.NewService(&s.Files.Files).Register(s.gs)
-	return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
+	if s.http != nil {
+		return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
+	}
+	return s.gs.Serve(lis)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
