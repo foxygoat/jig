@@ -8,7 +8,7 @@ import (
 	"os"
 
 	"foxygo.at/jig/log"
-	"foxygo.at/jig/registry"
+	"foxygo.at/protog/registry"
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"

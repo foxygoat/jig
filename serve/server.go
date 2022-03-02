@@ -12,7 +12,7 @@ import (
 
 	"foxygo.at/jig/log"
 	"foxygo.at/jig/reflection"
-	"foxygo.at/jig/registry"
+	"foxygo.at/protog/registry"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
