@@ -12,7 +12,7 @@ import (
 
 	"foxygo.at/jig/log"
 	"foxygo.at/jig/reflection"
-	"foxygo.at/jig/registry"
+	"foxygo.at/protog/registry"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
@@ -80,7 +80,7 @@ func (s *Server) SetHTTPHandler(handler http.Handler) {
 
 func (s *Server) Serve(lis net.Listener) error {
 	s.gs = grpc.NewServer(grpc.UnknownServiceHandler(s.UnknownHandler))
-	reflection.NewService(&s.Files.Files).Register(s.gs)
+	reflection.NewService(s.Files).Register(s.gs)
 	if s.http != nil {
 		return http.Serve(lis, h2c.NewHandler(s, &http2.Server{}))
 	}

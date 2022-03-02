@@ -3,7 +3,8 @@ module foxygo.at/jig
 go 1.17
 
 require (
-	github.com/alecthomas/kong v0.2.19
+	foxygo.at/protog v0.0.14
+	github.com/alecthomas/kong v0.4.1
 	github.com/google/go-jsonnet v0.17.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4

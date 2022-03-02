@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"foxygo.at/jig/registry"
+	"foxygo.at/protog/registry"
 	statuspb "google.golang.org/genproto/googleapis/rpc/status"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
