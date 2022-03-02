@@ -9,16 +9,11 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
-	"strings"
 	"testing"
 
 	"foxygo.at/jig/internal/client"
 	"foxygo.at/jig/log"
-	"foxygo.at/jig/pb/greet"
 	"github.com/stretchr/testify/require"
-	statuspb "google.golang.org/genproto/googleapis/rpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
 )
 
 func newTestServer() *TestServer {
@@ -42,20 +37,20 @@ func TestGreeterSample(t *testing.T) {
 	out := &bytes.Buffer{}
 
 	unaryWant := `
-Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [unary]: Hello 🌏
 Trailer: map[]`
 	clientWant := `
-Header: map[content-type:[application/grpc] count:[3] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc] count:[3]]
 Greeting: 💃 jig [client]: Hello 1 and 2 and 3
 Trailer: map[size:[35]]`
 	serverWant := `
-Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [server]: Hello Stranger
 Greeting: 💃 jig [server]: Goodbye Stranger
 Trailer: map[]`
 	bidiWant := `
-Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [bidi]: Hello a b c
 Trailer: map[]`
 
@@ -96,19 +91,19 @@ func TestGreeterSampleStatus(t *testing.T) {
 	out := &bytes.Buffer{}
 
 	unaryWant := `
-Header: map[content-type:[application/grpc] eat:[my shorts] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc] eat:[my shorts]]
 Trailer: map[a:[cow] dont:[have]]`
 	unaryErrWant := `
 rpc error: code = InvalidArgument desc = 💃 jig [unary]: eat my shorts
 seconds:42
 [google.api.http]:{post:"/api/greet/hello"}`
 	bidiWant := `
-Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [bidi]: Hello 1
 Trailer: map[]`
 	bidiErrWant := " rpc error: code = Unknown desc = transport: the stream is done or WriteHeader was already called"
 	bidiWant2 := `
-Header: map[content-type:[application/grpc] eat:[his shorts] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Header: map[content-type:[application/grpc] eat:[his shorts]]
 Trailer: map[]`
 	bidiErrWant2 := " rpc error: code = InvalidArgument desc = 💃 jig [bidi]: eat my shorts"
 	tests := map[string]testCaseStatus{
@@ -145,7 +140,7 @@ func TestGreeterEmbedFS(t *testing.T) {
 
 	out := &bytes.Buffer{}
 
-	want := `Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+	want := `Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [unary]: Hello 🌏
 Trailer: map[]
 `
@@ -154,61 +149,40 @@ Trailer: map[]
 	require.Equal(t, want, out.String())
 }
 
-func TestHTTP(t *testing.T) {
+func TestHTTPHandler(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Stop()
 
-	body := `{"first_name": "Stranger"}`
-	url := fmt.Sprintf("http://%s/api/greet/hello", ts.Addr())
-
-	t.Run("accept JSON response", func(t *testing.T) {
-		resp, err := http.Post(url, "application/json; charset=utf-8", strings.NewReader(body))
-		require.NoError(t, err)
-
-		respPb := &greet.HelloResponse{}
-		raw, err := ioutil.ReadAll(resp.Body)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.NoError(t, protojson.Unmarshal(raw, respPb))
-
-		expected := &greet.HelloResponse{Greeting: "💃 jig [unary]: Hello Stranger"}
-		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/foo", func(w http.ResponseWriter, _ *http.Request) {
+		w.Write([]byte("bar")) //nolint:errcheck
 	})
+	ts.SetHTTPHandler(mux)
 
-	t.Run("accept binary response", func(t *testing.T) {
-		req, err := http.NewRequest("POST", url, strings.NewReader(body))
-		require.NoError(t, err)
-		req.Header.Set("Accept", "application/x-protobuf; charset=utf-8")
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
+	c, err := client.New(ts.Addr())
+	require.NoError(t, err)
+	defer c.Close()
 
-		respPb := &greet.HelloResponse{}
-		raw, err := ioutil.ReadAll(resp.Body)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.NoError(t, proto.Unmarshal(raw, respPb))
+	out := &bytes.Buffer{}
 
-		expected := &greet.HelloResponse{Greeting: "💃 jig [unary]: Hello Stranger"}
-		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
-	})
+	// The http.Handler implementation of grpc.Server adds the "trailer" headers
+	// to the response. The built-in implementation does not.
+	grpcWant := `
+Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
+Greeting: 💃 jig [unary]: Hello 🌏
+Trailer: map[]`
 
-	t.Run("converts error responses to HTTP", func(t *testing.T) {
-		badRequestBody := `{"first_name": "Bart"}`
-		req, err := http.NewRequest("POST", url, strings.NewReader(badRequestBody))
-		require.NoError(t, err)
-		req.Header.Set("Accept", "application/json; charset=utf-8")
-		resp, err := http.DefaultClient.Do(req)
-		require.NoError(t, err)
-		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	// Test that gRPC calls work when an http handler is installed
+	err = c.Call(out, []string{"🌏"}, "unary")
+	require.NoError(t, err)
+	want := grpcWant[1:] + "\n"
+	require.Equal(t, want, out.String())
 
-		respPb := &statuspb.Status{}
-		raw, err := ioutil.ReadAll(resp.Body)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.NoError(t, protojson.Unmarshal(raw, respPb))
-
-		respPb.Details = nil
-		expected := &statuspb.Status{Code: 3, Message: "💃 jig [unary]: eat my shorts"}
-		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
-	})
+	// Test that the http handler is called
+	url := fmt.Sprintf("http://%s/foo", ts.Addr())
+	resp, err := http.Get(url)
+	require.NoError(t, err)
+	body, err := ioutil.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.Equal(t, "bar", string(body))
 }

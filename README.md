@@ -114,7 +114,7 @@ Build and start jig on the test data:
 
     . ./bin/activate-hermit
     make install
-    jig serve serve/testdata/greet
+    jig serve --http serve/testdata/greet
 
 in a second terminal call it with:
 
@@ -126,7 +126,7 @@ To see streaming, call it with:
     client --stream=client you me world
     client --stream=bidi you me world
 
-To call over HTTP, call it with:
+The `--http` flag passed to `jig serve` above allows you to make HTTP requests:
 
     curl \
         -H "Content-Type: application/json" \

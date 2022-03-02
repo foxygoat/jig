@@ -24,16 +24,14 @@ type httpMethod struct {
 	rule *annotations.HttpRule
 }
 
-type HandleForwardedGRPCRequest func(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error
-
 // Server serves protobuf methods, annotated using httprule options, over HTTP.
 type Server struct {
 	httpMethods []*httpMethod
-	grpcHandler HandleForwardedGRPCRequest
+	grpcHandler grpc.StreamHandler
 	log         log.Logger
 }
 
-func NewServer(files *registry.Files, handler HandleForwardedGRPCRequest) *Server {
+func NewServer(files *registry.Files, handler grpc.StreamHandler) *Server {
 	return &Server{
 		httpMethods: loadHTTPRules(files),
 		grpcHandler: handler,
@@ -60,7 +58,7 @@ func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.R
 		vars:       vars,
 		log:        s.log,
 	}
-	if err := s.grpcHandler(m.desc, ss); err != nil {
+	if err := s.grpcHandler(m.desc.FullName(), ss); err != nil {
 		ss.writeError(err)
 		return
 	}

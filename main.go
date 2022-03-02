@@ -6,6 +6,7 @@ import (
 	"foxygo.at/jig/bones"
 	"foxygo.at/jig/log"
 	"foxygo.at/jig/serve"
+	"foxygo.at/jig/serve/httprule"
 	"github.com/alecthomas/kong"
 )
 
@@ -21,6 +22,7 @@ type cmdServe struct {
 	ProtoSet []string     `short:"p" help:"Protoset .pb files containing service and deps"`
 	LogLevel log.LogLevel `help:"Server logging level" default:"error"`
 	Listen   string       `short:"l" default:"localhost:8080" help:"TCP listen address"`
+	HTTP     bool         `short:"h" help:"Serve on HTTP too, using HttpRule annotations"`
 
 	Dirs []string `arg:"" help:"Directory containing method definitions and protoset .pb file"`
 }
@@ -50,6 +52,12 @@ func (cs *cmdServe) Run() error {
 	if err != nil {
 		return err
 	}
+
+	if cs.HTTP {
+		h := httprule.NewServer(s.Files, s.UnknownHandler)
+		s.SetHTTPHandler(h)
+	}
+
 	return s.ListenAndServe(cs.Listen)
 }
 
