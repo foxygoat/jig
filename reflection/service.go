@@ -3,14 +3,13 @@ package reflection
 import (
 	"io"
 
-	"foxygo.at/jig/registry"
+	"foxygo.at/protog/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	pb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
 // Service is an implementation of the gRPC ServerReflection service, using a
@@ -20,10 +19,19 @@ type Service struct {
 	registry *registry.Files
 }
 
+// FileDescriptorRanger iterates over a set of FileDescriptors.
+type FileDescriptorRanger interface {
+	// RangeFiles calls fn for each FileDescriptor in the Ranger, stopping
+	// when there are no more or when fn returns false.
+	RangeFiles(fn func(protoreflect.FileDescriptor) bool)
+}
+
 // NewService returns a new Service that implements the gRPC ServerReflection
-// service from the given files registry.
-func NewService(files *protoregistry.Files) *Service {
-	r := registry.NewFiles(cloneFiles(files))
+// service from the given files registry. The files registry is cloned so that
+// the reflection file descriptor can be registered without mutating the
+// argument.
+func NewService(files FileDescriptorRanger) *Service {
+	r := cloneRegistry(files)
 	// Ignore the RegisterFile error on the assumption it means the reflection
 	// protofile is already registered.
 	_ = r.RegisterFile(pb.File_reflection_grpc_reflection_v1alpha_reflection_proto)
@@ -168,8 +176,8 @@ func (sh *streamHandler) listServices(req *pb.ServerReflectionRequest_ListServic
 	}
 }
 
-func cloneFiles(files *protoregistry.Files) *protoregistry.Files {
-	clone := &protoregistry.Files{}
+func cloneRegistry(files FileDescriptorRanger) *registry.Files {
+	clone := new(registry.Files)
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		if err := clone.RegisterFile(fd); err != nil {
 			panic(err)
