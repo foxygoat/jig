@@ -79,4 +79,13 @@ func TestHTTP(t *testing.T) {
 		expected := &statuspb.Status{Code: 3, Message: "💃 jig [unary]: eat my shorts"}
 		require.Truef(t, proto.Equal(expected, respPb), "expected: %s, \nactual: %s", expected, respPb)
 	})
+
+	t.Run("return 404 for invalid path", func(t *testing.T) {
+		req, err := http.NewRequest("GET", url, nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "application/json; charset=utf-8")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
 }

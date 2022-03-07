@@ -46,6 +46,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	http.NotFound(w, r)
 }
 
 // Serve a google.api.http annotated method as HTTP
