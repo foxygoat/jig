@@ -69,6 +69,9 @@ func decodeBody(rule *annotations.HttpRule, req *http.Request, target proto.Mess
 	}
 	mediaType := ContentTypeJSON
 	contentType := req.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = req.Header.Get("Accept")
+	}
 	var err error
 	if contentType != "" {
 		mediaType, _, err = mime.ParseMediaType(contentType)
