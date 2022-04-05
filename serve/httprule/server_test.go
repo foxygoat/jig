@@ -46,6 +46,7 @@ func TestHTTP(t *testing.T) {
 	t.Run("accept binary response", func(t *testing.T) {
 		req, err := http.NewRequest("POST", url, strings.NewReader(body))
 		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json; charset=utf-8")
 		req.Header.Set("Accept", "application/x-protobuf; charset=utf-8")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)

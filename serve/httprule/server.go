@@ -191,6 +191,9 @@ func getAcceptType(r *http.Request) (string, error) {
 	mediaType := ContentTypeJSON
 	// TODO: There's a lot more to parsing Accept headers...
 	accept := r.Header.Get("Accept")
+	if accept == "" {
+		accept = r.Header.Get("Content-Type")
+	}
 	if accept != "" && accept != "*/*" {
 		mediaType, _, err = mime.ParseMediaType(accept)
 		if err != nil {
