@@ -1,6 +1,6 @@
 module foxygo.at/jig
 
-go 1.17
+go 1.18
 
 require (
 	foxygo.at/protog v0.0.14
