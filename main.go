@@ -11,6 +11,7 @@ import (
 	"github.com/alecthomas/kong"
 	"github.com/alecthomas/protobuf/compiler"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 var version = "v0.0.0"
@@ -35,7 +36,11 @@ type cmdServe struct {
 }
 
 type cmdBones struct {
-	ProtoSet  string   `short:"p" help:"Protoset .pb file containing service and deps" required:""`
+	ProtoSet string `short:"p" help:"Protoset .pb file containing service and deps" xor:"proto"`
+
+	Proto     string   `short:"P" help:"Proto source .proto file containing service" xor:"proto"`
+	ProtoPath []string `short:"I" help:"Import paths for --proto files' dependencies"`
+
 	MethodDir string   `short:"m" help:"Directory to write method definitions to"`
 	Force     bool     `short:"f" help:"Overwrite existing bones files"`
 	Targets   []string `arg:"" optional:"" help:"Target pkg/service/method to generate"`
@@ -85,9 +90,27 @@ func (cs *cmdServe) getServerOptions(logger log.Logger) ([]serve.Option, error) 
 }
 
 func (cb *cmdBones) Run() error {
+	fds := &descriptorpb.FileDescriptorSet{}
+	if cb.ProtoSet != "" {
+		b, err := os.ReadFile(cb.ProtoSet)
+		if err != nil {
+			return err
+		}
+		if err := proto.Unmarshal(b, fds); err != nil {
+			return err
+		}
+	} else {
+		var err error
+		includeImports := true
+		fds, err = compiler.Compile([]string{cb.Proto}, cb.ProtoPath, includeImports)
+		if err != nil {
+			return fmt.Errorf("cannot compile protos %v with import paths %v: %w", cb.Proto, cb.ProtoPath, err)
+		}
+	}
+
 	opts := bones.FormatOptions{
 		Lang:       cb.Language,
 		QuoteStyle: cb.QuoteStyle,
 	}
-	return bones.Generate(cb.ProtoSet, cb.MethodDir, cb.Force, cb.Targets, opts)
+	return bones.Generate(fds, cb.MethodDir, cb.Force, cb.Targets, opts)
 }

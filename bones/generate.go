@@ -5,10 +5,8 @@ import (
 	"os"
 	"path"
 
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/descriptorpb"
 )
 
@@ -17,8 +15,8 @@ import (
 // slice. Method exemplars are written to stdout if methodDir is empty,
 // otherwise each method is written to a separate file in that directory.
 // Existing files will not be overwritten unless force is true.
-func Generate(protoSet, methodDir string, force bool, targets []string, formatter FormatOptions) error {
-	files, err := loadProtoSet(protoSet)
+func Generate(fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatter FormatOptions) error {
+	files, err := protodesc.NewFiles(fds)
 	if err != nil {
 		return err
 	}
@@ -29,22 +27,6 @@ func Generate(protoSet, methodDir string, force bool, targets []string, formatte
 	})
 
 	return err
-}
-
-func loadProtoSet(protoSet string) (*protoregistry.Files, error) {
-	b, err := os.ReadFile(protoSet)
-	if err != nil {
-		return nil, err
-	}
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(b, fds); err != nil {
-		return nil, err
-	}
-	files, err := protodesc.NewFiles(fds)
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
 }
 
 func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter FormatOptions) error {
