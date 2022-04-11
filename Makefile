@@ -13,7 +13,7 @@ all: build test check-coverage lint lint-proto ## build, test, check coverage an
 ci: clean check-uptodate all  ## Full clean build and up-to-date checks as run on CI
 
 check-uptodate: proto tidy
-	test -z "$$(git status --porcelain)" || { git status; false; }
+	test -z "$$(git status --porcelain -- go.mod go.sum '*.pb')" || { git status; false; }
 
 clean::  ## Remove generated files
 	-rm -rf $(O)

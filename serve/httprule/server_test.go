@@ -23,7 +23,8 @@ func TestHTTP(t *testing.T) {
 	ts := serve.NewTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 	defer ts.Stop()
 
-	h := NewServer(ts.Files, ts.UnknownHandler)
+	logger := log.NewLogger(io.Discard, log.LogLevelError)
+	h := NewServer(ts.Files, ts.UnknownHandler, logger)
 	ts.SetHTTPHandler(h)
 
 	body := `{"first_name": "Stranger"}`

@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/descriptorpb"
 )
 
 func TestGenerateGolden(t *testing.T) {
@@ -23,13 +25,24 @@ func TestGenerateGolden(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			err := Generate(tc.pbFile, dir, false, nil, FormatOptions{QuoteStyle: tc.quoteStyle})
+
+			err := Generate(getFDS(t, tc.pbFile), dir, false, nil, FormatOptions{QuoteStyle: tc.quoteStyle})
 			require.NoError(t, err)
-			err = Generate(tc.pbFile, dir, false, nil, FormatOptions{Lang: JS, QuoteStyle: tc.quoteStyle})
+			err = Generate(getFDS(t, tc.pbFile), dir, false, nil, FormatOptions{Lang: JS, QuoteStyle: tc.quoteStyle})
 			require.NoError(t, err)
 			requireSameContent(t, tc.goldenDir, dir)
 		})
 	}
+}
+
+func getFDS(t *testing.T, filename string) *descriptorpb.FileDescriptorSet {
+	t.Helper()
+	b, err := os.ReadFile(filename)
+	require.NoError(t, err)
+	fds := &descriptorpb.FileDescriptorSet{}
+	err = proto.Unmarshal(b, fds)
+	require.NoError(t, err)
+	return fds
 }
 
 func requireSameContent(t *testing.T, wantDir, gotDir string) {

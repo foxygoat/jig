@@ -29,7 +29,25 @@ type Option func(s *Server) error
 
 func WithProtosets(protosets ...string) Option {
 	return func(s *Server) error {
-		s.protosets = append(s.protosets, protosets...)
+		for _, protoset := range protosets {
+			s.log.Debugf("loading protoset file: %s", protoset)
+			b, err := os.ReadFile(protoset)
+			if err != nil {
+				return err
+			}
+			fds := &descriptorpb.FileDescriptorSet{}
+			if err := proto.Unmarshal(b, fds); err != nil {
+				return err
+			}
+			s.fds = append(s.fds, fds)
+		}
+		return nil
+	}
+}
+
+func WithFileDescriptorSets(fds ...*descriptorpb.FileDescriptorSet) Option {
+	return func(s *Server) error {
+		s.fds = append(s.fds, fds...)
 		return nil
 	}
 }
@@ -44,12 +62,12 @@ func WithLogger(logger log.Logger) Option {
 type Server struct {
 	Files *registry.Files
 
-	log       log.Logger
-	gs        *grpc.Server
-	http      http.Handler
-	fs        fs.FS
-	protosets []string
-	eval      Evaluator
+	log  log.Logger
+	gs   *grpc.Server
+	http http.Handler
+	fs   fs.FS
+	fds  []*descriptorpb.FileDescriptorSet // []string
+	eval Evaluator
 }
 
 // NewServer creates a new Server for given evaluator, e.g. Jsonnet and
@@ -112,13 +130,8 @@ func (s *Server) Stop() {
 
 func (s *Server) loadProtosets() error {
 	seen := map[string]bool{}
-	for _, protoset := range s.protosets {
-		s.log.Debugf("loading protoset file: %s", protoset)
-		b, err := os.ReadFile(protoset)
-		if err != nil {
-			return err
-		}
-		if err := s.addFiles(b, seen); err != nil {
+	for _, fds := range s.fds {
+		if err := s.addFDS(fds, seen); err != nil {
 			return err
 		}
 	}
@@ -136,18 +149,18 @@ func (s *Server) loadProtosets() error {
 		if err != nil {
 			return err
 		}
-		if err := s.addFiles(b, seen); err != nil {
+		fds := &descriptorpb.FileDescriptorSet{}
+		if err := proto.Unmarshal(b, fds); err != nil {
+			return err
+		}
+		if err := s.addFDS(fds, seen); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Server) addFiles(b []byte, seen map[string]bool) error {
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(b, fds); err != nil {
-		return err
-	}
+func (s *Server) addFDS(fds *descriptorpb.FileDescriptorSet, seen map[string]bool) error {
 	files, err := protodesc.NewFiles(fds)
 	if err != nil {
 		return err
@@ -231,6 +244,14 @@ type TestServer struct {
 // NewTestServer starts and returns a new TestServer.
 // The caller should call Stop when finished, to shut it down.
 func NewTestServer(eval Evaluator, vfs fs.FS, options ...Option) *TestServer {
+	ts := NewUnstartedTestServer(eval, vfs, options...)
+	ts.Start()
+	return ts
+}
+
+// NewTestServer starts and returns a new TestServer.
+// The caller should call Stop when finished, to shut it down.
+func NewUnstartedTestServer(eval Evaluator, vfs fs.FS, options ...Option) *TestServer {
 	s, err := NewServer(eval, vfs, options...)
 	if err != nil {
 		panic(fmt.Sprintf("failed to create TestServer: %v", err))
@@ -241,8 +262,11 @@ func NewTestServer(eval Evaluator, vfs fs.FS, options ...Option) *TestServer {
 		panic(fmt.Sprintf("TestServer failed to listen: %v", err))
 	}
 	ts.lis = l
-	go ts.Serve(l) //nolint: errcheck
 	return ts
+}
+
+func (ts *TestServer) Start() {
+	go ts.Serve(ts.lis) //nolint: errcheck
 }
 
 func (ts *TestServer) Addr() string {
