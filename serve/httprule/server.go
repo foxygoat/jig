@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
-	"os"
 
 	"foxygo.at/jig/log"
 	"foxygo.at/protog/registry"
@@ -31,11 +30,11 @@ type Server struct {
 	log         log.Logger
 }
 
-func NewServer(files *registry.Files, handler grpc.StreamHandler) *Server {
+func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger) *Server {
 	return &Server{
-		httpMethods: loadHTTPRules(files),
+		httpMethods: loadHTTPRules(l, files),
 		grpcHandler: handler,
-		log:         log.NewLogger(os.Stderr, log.LogLevelError),
+		log:         l,
 	}
 }
 
@@ -66,7 +65,7 @@ func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.R
 	ss.writeResp()
 }
 
-func loadHTTPRules(files *registry.Files) []*httpMethod {
+func loadHTTPRules(l log.Logger, files *registry.Files) []*httpMethod {
 	var httpMethods []*httpMethod
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		sds := fd.Services()
@@ -75,6 +74,7 @@ func loadHTTPRules(files *registry.Files) []*httpMethod {
 			for j := 0; j < mds.Len(); j++ {
 				md := mds.Get(j)
 				rules := Collect(md)
+				l.Debugf("loading %d HTTPRules for %q", len(rules), md.Name())
 				for _, r := range rules {
 					m := &httpMethod{desc: md, rule: r}
 					httpMethods = append(httpMethods, m)
