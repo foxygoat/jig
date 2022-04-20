@@ -65,6 +65,7 @@ function Sample(input) {
       //   field: '',  // string
       //   repeat: [0],  // repeated int32
       // },
+      recursive: {},  // SampleResponse (recursive)
     },
   }
 }

@@ -12,8 +12,8 @@ all: build test check-coverage lint lint-proto ## build, test, check coverage an
 
 ci: clean check-uptodate all  ## Full clean build and up-to-date checks as run on CI
 
-check-uptodate: proto tidy
-	test -z "$$(git status --porcelain -- go.mod go.sum '*.pb')" || { git status; false; }
+check-uptodate: proto golden tidy
+	test -z "$$(git status --porcelain -- go.mod go.sum '*.pb' '*.jsonnet' '*.js')" || { git status; false; }
 
 clean::  ## Remove generated files
 	-rm -rf $(O)
@@ -49,7 +49,7 @@ cover: test  ## Show test coverage in your browser
 	go tool cover -html=$(COVERFILE)
 
 RUN_BONES = $(O)/jig bones --force --language=$(1) --quote-style=$(2) --proto-set pb/$(3)/$(4) --method-dir bones/testdata/golden/$(3)-$(2)
-golden: build  ## Generate golden test files
+golden: build proto  ## Generate golden test files
 	$(call RUN_BONES,jsonnet,double,exemplar,exemplar.pb)
 	$(call RUN_BONES,jsonnet,double,greet,greeter.pb)
 	$(call RUN_BONES,jsonnet,single,exemplar,exemplar.pb)

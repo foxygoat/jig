@@ -15,7 +15,7 @@ import (
 // slice. Method exemplars are written to stdout if methodDir is empty,
 // otherwise each method is written to a separate file in that directory.
 // Existing files will not be overwritten unless force is true.
-func Generate(fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatter FormatOptions) error {
+func Generate(fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatter Formatter) error {
 	files, err := protodesc.NewFiles(fds)
 	if err != nil {
 		return err
@@ -29,7 +29,7 @@ func Generate(fds *descriptorpb.FileDescriptorSet, methodDir string, force bool,
 	return err
 }
 
-func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter FormatOptions) error {
+func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter Formatter) error {
 	for _, sd := range services(fd) {
 		for _, md := range methods(sd) {
 			if err := genMethod(md, methodDir, force, targets, formatter); err != nil {
@@ -40,7 +40,7 @@ func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targe
 	return nil
 }
 
-func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatter FormatOptions) error {
+func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatter Formatter) error {
 	var err error
 	if !match(md, targets) {
 		return nil

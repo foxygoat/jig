@@ -88,6 +88,9 @@ message SampleResponse {
     SampleEnum a_enum_oneof = 24;
     SampleMessage1 a_message_oneof = 25;
   }
+
+  // Recursive
+  SampleResponse recursive = 26;
 }
 
 message WellKnownSample {

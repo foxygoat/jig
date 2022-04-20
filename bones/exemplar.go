@@ -4,23 +4,28 @@ import (
 	"fmt"
 	"strings"
 
+	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-// FormatOptions is a configurable target language exemplar generator.
-type FormatOptions struct {
+// Formatter is a configurable target language exemplar generator.
+type Formatter struct {
 	Lang       Lang
 	QuoteStyle QuoteStyle
+
+	messageStack []protoreflect.FullName
+}
+
+type FormatOptions = Formatter
+
+// Return the file extension for the given language.
+func (f *Formatter) Extension() string {
+	return "." + f.Lang.String()
 }
 
 // Return the file extension for the given language.
-func (o *FormatOptions) Extension() string {
-	return "." + o.Lang.String()
-}
-
-// Return the file extension for the given language.
-func (o *FormatOptions) quote(s string) string {
-	if o.QuoteStyle == Double {
+func (f *Formatter) quote(s string) string {
+	if f.QuoteStyle == Double {
 		return `"` + s + `"`
 	}
 	return `'` + s + `'`
@@ -29,9 +34,9 @@ func (o *FormatOptions) quote(s string) string {
 // MethodExemplar returns an exemplar for a method, with an exemplar for the
 // input message as a comment and a function returning an exemplar of the
 // output message as the method implementation.
-func (o *FormatOptions) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
+func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	// Format the input message exemplar as a comment
-	ime := o.MessageExemplar(md.Input())
+	ime := f.MessageExemplar(md.Input())
 	ime.append(",")
 	if md.IsStreamingClient() && !md.IsStreamingServer() {
 		ime.nest("stream: [", "],")
@@ -42,14 +47,14 @@ func (o *FormatOptions) MethodExemplar(md protoreflect.MethodDescriptor) exempla
 	ime.prefix("// ")
 
 	// Format the output message exemplar
-	ome := o.MessageExemplar(md.Output())
+	ome := f.MessageExemplar(md.Output())
 	ome.append(",")
 	if md.IsStreamingServer() {
 		ome.nest("stream: [", "],")
 	} else {
 		ome.prepend("response: ")
 	}
-	if o.Lang == Jsonnet {
+	if f.Lang == Jsonnet {
 		ome.nest("function(input) {", "}")
 	} else {
 		ome.nest("return {", "}")
@@ -83,23 +88,30 @@ func (o *FormatOptions) MethodExemplar(md protoreflect.MethodDescriptor) exempla
 // with a field for every message field. Each field value is an exemplar of the
 // type of the field. Oneof fields are emitted as comments as a message should
 // not have more than one oneof specified.
-func (o *FormatOptions) MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 
 	if strings.HasPrefix(string(md.FullName()), "google.protobuf.") {
-		if e = o.WellKnownExemplar(md); len(e.lines) > 0 {
+		if e = f.WellKnownExemplar(md); len(e.lines) > 0 {
 			return e
 		}
 	}
 
+	if slices.Contains(f.messageStack, md.FullName()) {
+		e.line("{}")
+		return e
+	}
+
+	f.messageStack = append(f.messageStack, md.FullName())
 	for _, fd := range fields(md) {
-		fe := o.FieldExemplar(fd)
+		fe := f.FieldExemplar(fd)
 		if fd.ContainingOneof() != nil {
 			// Comment out one-of fields since they should not all be present.
 			fe.prefix("// ")
 		}
 		e.extend(fe)
 	}
+	f.messageStack = f.messageStack[:len(f.messageStack)-1]
 
 	e.nest("{", "}")
 	return e
@@ -110,7 +122,7 @@ func (o *FormatOptions) MessageExemplar(md protoreflect.MessageDescriptor) exemp
 // JSON as a single field, rather than as an object.
 //
 // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf
-func (o *FormatOptions) WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (f *Formatter) WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 	switch string(md.Name()) {
 	case "Api", "Enum", "EnumValue", "Field", "Method", "Mixin", "Option", "SourceContext", "Type":
@@ -118,29 +130,29 @@ func (o *FormatOptions) WellKnownExemplar(md protoreflect.MessageDescriptor) exe
 	case "Any":
 		// Emit an Any that can be read back in without modification
 		// Duration chosen at random, almost. Also for its simplicity.
-		e.line(o.quote("@type") + ": " + o.quote("type.googleapis.com/google.protobuf.Duration") + ",")
-		e.line("value: " + o.quote("0s") + ",")
+		e.line(f.quote("@type") + ": " + f.quote("type.googleapis.com/google.protobuf.Duration") + ",")
+		e.line("value: " + f.quote("0s") + ",")
 		e.nest("{", "}")
 	case "BoolValue", "BytesValue", "DoubleValue", "FloatValue",
 		"Int32Value", "Int64Value", "StringValue", "UInt32Value", "UInt64Value":
-		return o.FieldValueExemplar(md.Fields().ByName("value"))
+		return f.FieldValueExemplar(md.Fields().ByName("value"))
 	case "Duration":
-		e.line(o.quote("0s"))
+		e.line(f.quote("0s"))
 	case "Empty":
 		e.line("{}")
 	case "FieldMask":
-		e.line(o.quote("field1.field2,field3"))
+		e.line(f.quote("field1.field2,field3"))
 	case "ListValue":
-		return o.FieldValueExemplar(md.Fields().ByName("values"))
+		return f.FieldValueExemplar(md.Fields().ByName("values"))
 	case "Struct":
-		e = o.FieldValueExemplar(md.Fields().Get(0).MapValue())
+		e = f.FieldValueExemplar(md.Fields().Get(0).MapValue())
 		e.prepend("structField: ")
 		e.append(",")
 		e.nest("{", "}")
 	case "Timestamp":
-		e.line(o.quote("2006-01-02T15:04:05.999999999Z"))
+		e.line(f.quote("2006-01-02T15:04:05.999999999Z"))
 	case "Value":
-		e.line(o.quote("https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#value"))
+		e.line(f.quote("https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#value"))
 	}
 	return e
 }
@@ -148,14 +160,14 @@ func (o *FormatOptions) WellKnownExemplar(md protoreflect.MessageDescriptor) exe
 // FieldExemplar returns an exemplar for a message field. It has the JSON name
 // for the field prefixed and a comment appended to the first line describing
 // the type of the field.
-func (o *FormatOptions) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
-	e := o.FieldValueExemplar(fd)
+func (f *Formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
+	e := f.FieldValueExemplar(fd)
 	e.prepend(fd.JSONName() + ": ")
 	e.append(",")
 
 	// Add a description of the type to the end of the first line of the
 	// exemplar as a comment. If part of a oneof, name the oneof too.
-	if desc := o.typeDescription(fd); desc != "" {
+	if desc := f.typeDescription(fd); desc != "" {
 		if od := fd.ContainingOneof(); od != nil {
 			desc += " (one-of " + string(od.Name()) + ")"
 		}
@@ -174,15 +186,15 @@ func (o *FormatOptions) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar 
 //
 // Repeated fields are emitted with a single element exemplar of the repeated
 // type.
-func (o *FormatOptions) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (f *Formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
-		e = o.EnumExemplar(fd)
+		e = f.EnumExemplar(fd)
 	case protoreflect.MessageKind, protoreflect.GroupKind:
-		e = o.MessageExemplar(fd.Message())
+		e = f.MessageExemplar(fd.Message())
 	default:
-		e = o.ScalarExemplar(fd.Kind())
+		e = f.ScalarExemplar(fd.Kind())
 	}
 
 	if fd.Cardinality() == protoreflect.Repeated {
@@ -198,7 +210,7 @@ func (o *FormatOptions) FieldValueExemplar(fd protoreflect.FieldDescriptor) exem
 // Enum exemplars are emitted as a string with the name of the second enum if
 // there is more than one enum value, otherwise the first enum. The second enum
 // is preferred as often the first enum is the "invalid" value for that enum.
-func (o *FormatOptions) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (f *Formatter) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	if fd.Kind() != protoreflect.EnumKind {
 		return e
@@ -215,13 +227,13 @@ func (o *FormatOptions) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	if ev.Len() > 1 {
 		name = ev.Get(1).Name()
 	}
-	e.line(o.quote(string(name)))
+	e.line(f.quote(string(name)))
 	return e
 }
 
 // ScalarExemplar returns an exemplar with a value for basic kinds that have a
 // single value (scalars). An empty exemplar is returned for other kinds.
-func (o *FormatOptions) ScalarExemplar(kind protoreflect.Kind) exemplar {
+func (f *Formatter) ScalarExemplar(kind protoreflect.Kind) exemplar {
 	var e exemplar
 	switch kind {
 	case protoreflect.BoolKind:
@@ -234,15 +246,15 @@ func (o *FormatOptions) ScalarExemplar(kind protoreflect.Kind) exemplar {
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		e.line("0.0")
 	case protoreflect.StringKind, protoreflect.BytesKind:
-		e.line(o.quote(""))
+		e.line(f.quote(""))
 	}
 	return e
 }
 
 // typeDescription returns a string description of a field's type.
-func (o *FormatOptions) typeDescription(fd protoreflect.FieldDescriptor) string {
+func (f *Formatter) typeDescription(fd protoreflect.FieldDescriptor) string {
 	if fd.IsMap() {
-		return fmt.Sprintf("map<%s, %s>", o.typeDescription(fd.MapKey()), o.typeDescription(fd.MapValue()))
+		return fmt.Sprintf("map<%s, %s>", f.typeDescription(fd.MapKey()), f.typeDescription(fd.MapValue()))
 	}
 	result := ""
 	switch fd.Kind() {
@@ -250,6 +262,9 @@ func (o *FormatOptions) typeDescription(fd protoreflect.FieldDescriptor) string 
 		result = string(fd.Enum().Name())
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		result = string(fd.Message().Name())
+		if slices.Contains(f.messageStack, fd.Message().FullName()) {
+			result += " (recursive)"
+		}
 	case protoreflect.BoolKind,
 		protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Uint32Kind,
 		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Uint64Kind,
