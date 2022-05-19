@@ -23,7 +23,7 @@ func TestHTTPRuleServer(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("serve/testdata/httpgreet"), opts...)
-	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, logger))
+	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, logger, nil))
 	ts.Start()
 	defer ts.Stop()
 

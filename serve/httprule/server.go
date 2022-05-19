@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"strings"
 
 	"foxygo.at/jig/log"
 	"foxygo.at/protog/registry"
@@ -30,9 +31,9 @@ type Server struct {
 	log         log.Logger
 }
 
-func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger) *Server {
+func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger, httpRuleTemplates []*annotations.HttpRule) *Server {
 	return &Server{
-		httpMethods: loadHTTPRules(l, files),
+		httpMethods: loadHTTPRules(l, files, httpRuleTemplates),
 		grpcHandler: handler,
 		log:         l,
 	}
@@ -65,15 +66,19 @@ func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.R
 	ss.writeResp()
 }
 
-func loadHTTPRules(l log.Logger, files *registry.Files) []*httpMethod {
+func loadHTTPRules(l log.Logger, files *registry.Files, httpRuleTemplates []*annotations.HttpRule) []*httpMethod {
 	var httpMethods []*httpMethod
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		sds := fd.Services()
 		for i := 0; i < sds.Len(); i++ {
-			mds := sds.Get(i).Methods()
+			sd := sds.Get(i)
+			mds := sd.Methods()
 			for j := 0; j < mds.Len(); j++ {
 				md := mds.Get(j)
 				rules := Collect(md)
+				if len(rules) == 0 && len(httpRuleTemplates) != 0 {
+					rules = interpolateHTTPRules(httpRuleTemplates, string(fd.Package()), string(sd.Name()), string(md.Name()))
+				}
 				l.Debugf("loading %d HTTPRules for %q", len(rules), md.Name())
 				for _, r := range rules {
 					m := &httpMethod{desc: md, rule: r}
@@ -84,6 +89,35 @@ func loadHTTPRules(l log.Logger, files *registry.Files) []*httpMethod {
 		return true
 	})
 	return httpMethods
+}
+
+func interpolateHTTPRules(httpRuleTemplates []*annotations.HttpRule, pkg, service, method string) []*annotations.HttpRule {
+	rules := make([]*annotations.HttpRule, len(httpRuleTemplates))
+	for i, tmpl := range httpRuleTemplates {
+		rules[i] = proto.Clone(tmpl).(*annotations.HttpRule)
+		switch v := rules[i].Pattern.(type) {
+		case *annotations.HttpRule_Get:
+			v.Get = interpolate(v.Get, pkg, service, method)
+		case *annotations.HttpRule_Put:
+			v.Put = interpolate(v.Put, pkg, service, method)
+		case *annotations.HttpRule_Post:
+			v.Post = interpolate(v.Post, pkg, service, method)
+		case *annotations.HttpRule_Delete:
+			v.Delete = interpolate(v.Delete, pkg, service, method)
+		case *annotations.HttpRule_Patch:
+			v.Patch = interpolate(v.Patch, pkg, service, method)
+		case *annotations.HttpRule_Custom:
+			v.Custom.Path = interpolate(v.Custom.Path, pkg, service, method)
+		}
+	}
+	return rules
+}
+
+func interpolate(path, pkg, service, method string) string {
+	path = strings.ReplaceAll(path, "{package}", pkg)
+	path = strings.ReplaceAll(path, "{service}", service)
+	path = strings.ReplaceAll(path, "{method}", method)
+	return path
 }
 
 type serverStream struct {

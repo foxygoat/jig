@@ -81,6 +81,7 @@ proto:  ## Generate Go pb and grpc bindings and FileDescritor set for .proto fil
 	$(foreach PROTO,$(PROTOFILES),$(GENPROTO)$(nl))
 	gofumpt -w pb
 	cp pb/greet/greeter.pb pb/google/protobuf/duration.pb serve/testdata/greet
+	cp pb/httpgreet/httpgreet.pb serve/testdata/httpgreet
 
 .PHONY: lint-proto proto
 
