@@ -18,6 +18,8 @@ service HttpGreeter {
   rpc PostHelloURL (HelloRequest) returns (HelloResponse) {
     option (google.api.http) = { post:"/api/greet/{first_name}" body:"*" };
   }
+
+  rpc SimpleHello (HelloRequest) returns (HelloResponse);
 }
 
 message HelloRequest {

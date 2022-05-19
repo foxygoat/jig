@@ -22,6 +22,7 @@ type HttpGreeterClient interface {
 	GetHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 	PostHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 	PostHelloURL(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
+	SimpleHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error)
 }
 
 type httpGreeterClient struct {
@@ -59,6 +60,15 @@ func (c *httpGreeterClient) PostHelloURL(ctx context.Context, in *HelloRequest, 
 	return out, nil
 }
 
+func (c *httpGreeterClient) SimpleHello(ctx context.Context, in *HelloRequest, opts ...grpc.CallOption) (*HelloResponse, error) {
+	out := new(HelloResponse)
+	err := c.cc.Invoke(ctx, "/httpgreet.HttpGreeter/SimpleHello", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // HttpGreeterServer is the server API for HttpGreeter service.
 // All implementations must embed UnimplementedHttpGreeterServer
 // for forward compatibility
@@ -67,6 +77,7 @@ type HttpGreeterServer interface {
 	GetHello(context.Context, *HelloRequest) (*HelloResponse, error)
 	PostHello(context.Context, *HelloRequest) (*HelloResponse, error)
 	PostHelloURL(context.Context, *HelloRequest) (*HelloResponse, error)
+	SimpleHello(context.Context, *HelloRequest) (*HelloResponse, error)
 	mustEmbedUnimplementedHttpGreeterServer()
 }
 
@@ -82,6 +93,9 @@ func (UnimplementedHttpGreeterServer) PostHello(context.Context, *HelloRequest) 
 }
 func (UnimplementedHttpGreeterServer) PostHelloURL(context.Context, *HelloRequest) (*HelloResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PostHelloURL not implemented")
+}
+func (UnimplementedHttpGreeterServer) SimpleHello(context.Context, *HelloRequest) (*HelloResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SimpleHello not implemented")
 }
 func (UnimplementedHttpGreeterServer) mustEmbedUnimplementedHttpGreeterServer() {}
 
@@ -150,6 +164,24 @@ func _HttpGreeter_PostHelloURL_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HttpGreeter_SimpleHello_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HelloRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HttpGreeterServer).SimpleHello(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/httpgreet.HttpGreeter/SimpleHello",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HttpGreeterServer).SimpleHello(ctx, req.(*HelloRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HttpGreeter_ServiceDesc is the grpc.ServiceDesc for HttpGreeter service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -168,6 +200,10 @@ var HttpGreeter_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PostHelloURL",
 			Handler:    _HttpGreeter_PostHelloURL_Handler,
+		},
+		{
+			MethodName: "SimpleHello",
+			Handler:    _HttpGreeter_SimpleHello_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

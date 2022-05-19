@@ -69,7 +69,7 @@ func (cs *cmdServe) Run() error {
 	}
 
 	if cs.HTTP {
-		h := httprule.NewServer(s.Files, s.UnknownHandler, logger)
+		h := httprule.NewServer(s.Files, s.UnknownHandler, logger, nil)
 		s.SetHTTPHandler(h)
 	}
 

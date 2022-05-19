@@ -124,7 +124,7 @@ func (s *Server) ListenAndServe(listenAddr string) error {
 
 func (s *Server) Stop() {
 	if s.gs != nil {
-		s.gs.GracefulStop()
+		s.gs.Stop()
 	}
 }
 
