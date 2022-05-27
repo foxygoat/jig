@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"foxygo.at/jig/log"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -26,9 +27,9 @@ func TestGenerateGolden(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 
-			err := Generate(getFDS(t, tc.pbFile), dir, false, nil, Formatter{QuoteStyle: tc.quoteStyle})
+			err := Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, Formatter{QuoteStyle: tc.quoteStyle})
 			require.NoError(t, err)
-			err = Generate(getFDS(t, tc.pbFile), dir, false, nil, Formatter{Lang: JS, QuoteStyle: tc.quoteStyle})
+			err = Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, Formatter{Lang: JS, QuoteStyle: tc.quoteStyle})
 			require.NoError(t, err)
 			requireSameContent(t, tc.goldenDir, dir)
 		})

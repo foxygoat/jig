@@ -20,12 +20,11 @@ import (
 )
 
 func TestHTTP(t *testing.T) {
-	logger := log.NewLogger(io.Discard, log.LogLevelError)
-	withLogger := serve.WithLogger(logger)
+	withLogger := serve.WithLogger(log.DiscardLogger)
 	ts := serve.NewTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 	defer ts.Stop()
 
-	h := NewServer(ts.Files, ts.UnknownHandler, logger, nil)
+	h := NewServer(ts.Files, ts.UnknownHandler, log.DiscardLogger, nil)
 	ts.SetHTTPHandler(h)
 
 	body := `{"first_name": "Stranger"}`
