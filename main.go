@@ -48,6 +48,7 @@ type cmdBones struct {
 
 	Language   bones.Lang       `help:"Target language" default:"jsonnet"`
 	QuoteStyle bones.QuoteStyle `help:"Print single or double quotes" default:"double"`
+	Minimal    bool             `help:"Print a minimal method stub without zero values for input and output"`
 }
 
 func main() {
@@ -120,6 +121,10 @@ func (cb *cmdBones) Run(logLevel log.LogLevel) error {
 		}
 	}
 
-	opts := bones.NewFormatter(cb.Language, cb.QuoteStyle)
+	opts := &bones.FormatterOptions{
+		Lang:       cb.Language,
+		QuoteStyle: cb.QuoteStyle,
+		Minimal:    cb.Minimal,
+	}
 	return bones.Generate(logger, fds, cb.MethodDir, cb.Force, cb.Targets, opts)
 }

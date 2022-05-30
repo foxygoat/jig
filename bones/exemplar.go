@@ -8,47 +8,56 @@ import (
 )
 
 // Formatter is a configurable target language exemplar generator.
-type Formatter struct {
-	lang       Lang
-	quoteStyle QuoteStyle
-
+type formatter struct {
 	messagesSeen map[protoreflect.FullName]bool
+	opts         *FormatterOptions
+}
+
+type FormatterOptions struct {
+	Lang       Lang
+	QuoteStyle QuoteStyle
+	Minimal    bool
 }
 
 // NewFormatter creates a new Formatter for given language, quote style,
 // and weather to use just input/output type names or flash out all
 // data structures on their first occurrence.
-func NewFormatter(lang Lang, quoteStyle QuoteStyle) *Formatter {
-	return &Formatter{
-		lang:       lang,
-		quoteStyle: quoteStyle,
+func newFormatter(opts *FormatterOptions) *formatter {
+	return &formatter{
+		opts:         opts,
+		messagesSeen: map[protoreflect.FullName]bool{},
 	}
 }
 
 // Return the file extension for the given language.
-func (f *Formatter) Extension() string {
-	return "." + f.lang.String()
+func (f *formatter) Extension() string {
+	return "." + f.opts.Lang.String()
 }
 
 // Return the file extension for the given language.
-func (f *Formatter) quote(s string) string {
-	if f.quoteStyle == Double {
+func (f *formatter) quote(s string) string {
+	if f.opts.QuoteStyle == Double {
 		return `"` + s + `"`
 	}
 	return `'` + s + `'`
 }
 
-func (f *Formatter) reset() {
+func (f *formatter) reset() {
 	f.messagesSeen = map[protoreflect.FullName]bool{}
 }
 
 // MethodExemplar returns an exemplar for a method, with an exemplar for the
 // input message as a comment and a function returning an exemplar of the
 // output message as the method implementation.
-func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
+func (f *formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	f.reset()
 	// Format the input message exemplar as a comment
-	ime := f.MessageExemplar(md.Input(), "  // "+string(md.Input().Name()))
+	var ime exemplar
+	if f.opts.Minimal {
+		ime = f.minimalMessageExemplar(md.Input())
+	} else {
+		ime = f.MessageExemplar(md.Input(), "  // "+string(md.Input().Name()))
+	}
 	ime.append(",")
 	if md.IsStreamingClient() && !md.IsStreamingServer() {
 		ime.nest("stream: [", "],")
@@ -60,14 +69,19 @@ func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 
 	// Format the output message exemplar
 	f.reset()
-	ome := f.MessageExemplar(md.Output(), "  // "+string(md.Output().Name()))
+	var ome exemplar
+	if f.opts.Minimal {
+		ome = f.minimalMessageExemplar(md.Output())
+	} else {
+		ome = f.MessageExemplar(md.Output(), "  // "+string(md.Output().Name()))
+	}
 	ome.append(",")
 	if md.IsStreamingServer() {
 		ome.nest("stream: [", "],")
 	} else {
 		ome.prepend("response: ")
 	}
-	if f.lang == Jsonnet {
+	if f.opts.Lang == Jsonnet {
 		ome.nest("function(input) {", "}")
 	} else {
 		ome.nest("return {", "}")
@@ -97,11 +111,18 @@ func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	return e
 }
 
+func (f *formatter) minimalMessageExemplar(md protoreflect.MessageDescriptor) exemplar {
+	var e exemplar
+	e.line("{  // " + string(md.FullName()))
+	e.line("}")
+	return e
+}
+
 // MessageExemplar returns an exemplar of a protobuf message as a JSON object
 // with a field for every message field. Each field value is an exemplar of the
 // type of the field. Oneof fields are emitted as comments as a message should
 // not have more than one oneof specified.
-func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor, headerPostfix string) exemplar {
+func (f *formatter) MessageExemplar(md protoreflect.MessageDescriptor, headerPostfix string) exemplar {
 	var e exemplar
 
 	if strings.HasPrefix(string(md.FullName()), "google.protobuf.") {
@@ -134,7 +155,7 @@ func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor, headerPos
 // JSON as a single field, rather than as an object.
 //
 // https://developers.google.com/protocol-buffers/docs/reference/google.protobuf
-func (f *Formatter) WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (f *formatter) WellKnownExemplar(md protoreflect.MessageDescriptor) exemplar {
 	var e exemplar
 	switch string(md.Name()) {
 	case "Api", "Enum", "EnumValue", "Field", "Method", "Mixin", "Option", "SourceContext", "Type":
@@ -172,7 +193,7 @@ func (f *Formatter) WellKnownExemplar(md protoreflect.MessageDescriptor) exempla
 // FieldExemplar returns an exemplar for a message field. It has the JSON name
 // for the field prefixed and a comment appended to the first line describing
 // the type of the field.
-func (f *Formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (f *formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	desc := f.typeDescription(fd)
 	seen := false
 	if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
@@ -212,7 +233,7 @@ func (f *Formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
 //
 // Repeated fields are emitted with a single element exemplar of the repeated
 // type.
-func (f *Formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (f *formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	switch fd.Kind() {
 	case protoreflect.EnumKind:
@@ -236,7 +257,7 @@ func (f *Formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar
 // Enum exemplars are emitted as a string with the name of the second enum if
 // there is more than one enum value, otherwise the first enum. The second enum
 // is preferred as often the first enum is the "invalid" value for that enum.
-func (f *Formatter) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
+func (f *formatter) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
 	if fd.Kind() != protoreflect.EnumKind {
 		return e
@@ -259,7 +280,7 @@ func (f *Formatter) EnumExemplar(fd protoreflect.FieldDescriptor) exemplar {
 
 // ScalarExemplar returns an exemplar with a value for basic kinds that have a
 // single value (scalars). An empty exemplar is returned for other kinds.
-func (f *Formatter) ScalarExemplar(kind protoreflect.Kind) exemplar {
+func (f *formatter) ScalarExemplar(kind protoreflect.Kind) exemplar {
 	var e exemplar
 	switch kind {
 	case protoreflect.BoolKind:
@@ -278,7 +299,7 @@ func (f *Formatter) ScalarExemplar(kind protoreflect.Kind) exemplar {
 }
 
 // typeDescription returns a string description of a field's type.
-func (f *Formatter) typeDescription(fd protoreflect.FieldDescriptor) string {
+func (f *formatter) typeDescription(fd protoreflect.FieldDescriptor) string {
 	if fd.IsMap() {
 		return fmt.Sprintf("map<%s, %s>", f.typeDescription(fd.MapKey()), f.typeDescription(fd.MapValue()))
 	}

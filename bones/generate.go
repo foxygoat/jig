@@ -16,24 +16,24 @@ import (
 // slice. Method exemplars are written to stdout if methodDir is empty,
 // otherwise each method is written to a separate file in that directory.
 // Existing files will not be overwritten unless force is true.
-func Generate(logger log.Logger, fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatter *Formatter) error {
+func Generate(logger log.Logger, fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	files, err := protodesc.NewFiles(fds)
 	if err != nil {
 		return err
 	}
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		err = genFile(logger, fd, methodDir, force, targets, formatter)
+		err = genFile(logger, fd, methodDir, force, targets, formatOpts)
 		return err == nil
 	})
 
 	return err
 }
 
-func genFile(logger log.Logger, fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter *Formatter) error {
+func genFile(logger log.Logger, fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	for _, sd := range services(fd) {
 		for _, md := range methods(sd) {
-			if err := genMethod(logger, md, methodDir, force, targets, formatter); err != nil {
+			if err := genMethod(logger, md, methodDir, force, targets, formatOpts); err != nil {
 				return err
 			}
 		}
@@ -41,12 +41,13 @@ func genFile(logger log.Logger, fd protoreflect.FileDescriptor, methodDir string
 	return nil
 }
 
-func genMethod(logger log.Logger, md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatter *Formatter) error {
+func genMethod(logger log.Logger, md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	var err error
 	if !match(md, targets) {
 		return nil
 	}
 
+	formatter := newFormatter(formatOpts)
 	f := os.Stdout
 	if methodDir != "" {
 		flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
