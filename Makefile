@@ -39,7 +39,7 @@ tidy:  ## Tidy go modules with "go mod tidy"
 # --- Test ---------------------------------------------------------------------
 COVERFILE = $(O)/coverage.txt
 
-test: $(O) ## Run tests and generate a coverage file
+test: | $(O) ## Run tests and generate a coverage file
 	go test -coverprofile=$(COVERFILE) ./...
 
 check-coverage: test  ## Check that test coverage meets the required level
