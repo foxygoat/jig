@@ -2,14 +2,14 @@
 
 // Input:
 // {
-//   request: {
+//   request: {  // HelloRequest
 //     firstName: '',  // string
 //   },
 // }
 
 function(input) {
   stream: [
-    {
+    {  // HelloResponse
       greeting: '',  // string
     },
   ],

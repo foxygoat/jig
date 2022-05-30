@@ -4,39 +4,51 @@ import (
 	"fmt"
 	"strings"
 
-	"golang.org/x/exp/slices"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // Formatter is a configurable target language exemplar generator.
 type Formatter struct {
-	Lang       Lang
-	QuoteStyle QuoteStyle
+	lang       Lang
+	quoteStyle QuoteStyle
 
-	messageStack []protoreflect.FullName
+	messagesSeen map[protoreflect.FullName]bool
 }
 
-type FormatOptions = Formatter
+// NewFormatter creates a new Formatter for given language, quote style,
+// and weather to use just input/output type names or flash out all
+// data structures on their first occurrence.
+func NewFormatter(lang Lang, quoteStyle QuoteStyle) *Formatter {
+	return &Formatter{
+		lang:       lang,
+		quoteStyle: quoteStyle,
+	}
+}
 
 // Return the file extension for the given language.
 func (f *Formatter) Extension() string {
-	return "." + f.Lang.String()
+	return "." + f.lang.String()
 }
 
 // Return the file extension for the given language.
 func (f *Formatter) quote(s string) string {
-	if f.QuoteStyle == Double {
+	if f.quoteStyle == Double {
 		return `"` + s + `"`
 	}
 	return `'` + s + `'`
+}
+
+func (f *Formatter) reset() {
+	f.messagesSeen = map[protoreflect.FullName]bool{}
 }
 
 // MethodExemplar returns an exemplar for a method, with an exemplar for the
 // input message as a comment and a function returning an exemplar of the
 // output message as the method implementation.
 func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
+	f.reset()
 	// Format the input message exemplar as a comment
-	ime := f.MessageExemplar(md.Input())
+	ime := f.MessageExemplar(md.Input(), "  // "+string(md.Input().Name()))
 	ime.append(",")
 	if md.IsStreamingClient() && !md.IsStreamingServer() {
 		ime.nest("stream: [", "],")
@@ -47,14 +59,15 @@ func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 	ime.prefix("// ")
 
 	// Format the output message exemplar
-	ome := f.MessageExemplar(md.Output())
+	f.reset()
+	ome := f.MessageExemplar(md.Output(), "  // "+string(md.Output().Name()))
 	ome.append(",")
 	if md.IsStreamingServer() {
 		ome.nest("stream: [", "],")
 	} else {
 		ome.prepend("response: ")
 	}
-	if f.Lang == Jsonnet {
+	if f.lang == Jsonnet {
 		ome.nest("function(input) {", "}")
 	} else {
 		ome.nest("return {", "}")
@@ -88,7 +101,7 @@ func (f *Formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 // with a field for every message field. Each field value is an exemplar of the
 // type of the field. Oneof fields are emitted as comments as a message should
 // not have more than one oneof specified.
-func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor) exemplar {
+func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor, headerPostfix string) exemplar {
 	var e exemplar
 
 	if strings.HasPrefix(string(md.FullName()), "google.protobuf.") {
@@ -97,12 +110,12 @@ func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor) exemplar 
 		}
 	}
 
-	if slices.Contains(f.messageStack, md.FullName()) {
+	if f.messagesSeen[md.FullName()] {
 		e.line("{}")
 		return e
 	}
 
-	f.messageStack = append(f.messageStack, md.FullName())
+	f.messagesSeen[md.FullName()] = true
 	for _, fd := range fields(md) {
 		fe := f.FieldExemplar(fd)
 		if fd.ContainingOneof() != nil {
@@ -111,9 +124,8 @@ func (f *Formatter) MessageExemplar(md protoreflect.MessageDescriptor) exemplar 
 		}
 		e.extend(fe)
 	}
-	f.messageStack = f.messageStack[:len(f.messageStack)-1]
 
-	e.nest("{", "}")
+	e.nest("{"+headerPostfix, "}")
 	return e
 }
 
@@ -161,16 +173,30 @@ func (f *Formatter) WellKnownExemplar(md protoreflect.MessageDescriptor) exempla
 // for the field prefixed and a comment appended to the first line describing
 // the type of the field.
 func (f *Formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
+	desc := f.typeDescription(fd)
+	seen := false
+	if fd.Kind() == protoreflect.MessageKind || fd.Kind() == protoreflect.GroupKind {
+		seen = f.messagesSeen[fd.Message().FullName()]
+	}
+
 	e := f.FieldValueExemplar(fd)
 	e.prepend(fd.JSONName() + ": ")
 	e.append(",")
 
 	// Add a description of the type to the end of the first line of the
 	// exemplar as a comment. If part of a oneof, name the oneof too.
-	if desc := f.typeDescription(fd); desc != "" {
-		if od := fd.ContainingOneof(); od != nil {
-			desc += " (one-of " + string(od.Name()) + ")"
+	if desc != "" {
+		seenComment := "see example above"
+		if od := fd.ContainingOneof(); od != nil && desc != "" {
+			desc += " (one-of " + string(od.Name())
+			if seen {
+				desc += ", " + seenComment
+			}
+			desc += ")"
+		} else if seen {
+			desc += " (" + seenComment + ")"
 		}
+
 		e.lines[0] += "  // " + desc
 	}
 
@@ -192,7 +218,7 @@ func (f *Formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar
 	case protoreflect.EnumKind:
 		e = f.EnumExemplar(fd)
 	case protoreflect.MessageKind, protoreflect.GroupKind:
-		e = f.MessageExemplar(fd.Message())
+		e = f.MessageExemplar(fd.Message(), "")
 	default:
 		e = f.ScalarExemplar(fd.Kind())
 	}
@@ -262,9 +288,6 @@ func (f *Formatter) typeDescription(fd protoreflect.FieldDescriptor) string {
 		result = string(fd.Enum().Name())
 	case protoreflect.MessageKind, protoreflect.GroupKind:
 		result = string(fd.Message().Name())
-		if slices.Contains(f.messageStack, fd.Message().FullName()) {
-			result += " (recursive)"
-		}
 	case protoreflect.BoolKind,
 		protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Uint32Kind,
 		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Uint64Kind,
@@ -278,7 +301,6 @@ func (f *Formatter) typeDescription(fd protoreflect.FieldDescriptor) string {
 	if fd.IsList() && result != "" {
 		result = "repeated " + result
 	}
-
 	return result
 }
 

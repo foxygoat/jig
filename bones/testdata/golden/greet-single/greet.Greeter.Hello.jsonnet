@@ -2,13 +2,13 @@
 
 // Input:
 // {
-//   request: {
+//   request: {  // HelloRequest
 //     firstName: '',  // string
 //   },
 // }
 
 function(input) {
-  response: {
+  response: {  // HelloResponse
     greeting: '',  // string
   },
 }

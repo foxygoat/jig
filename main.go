@@ -120,9 +120,6 @@ func (cb *cmdBones) Run(logLevel log.LogLevel) error {
 		}
 	}
 
-	opts := bones.FormatOptions{
-		Lang:       cb.Language,
-		QuoteStyle: cb.QuoteStyle,
-	}
+	opts := bones.NewFormatter(cb.Language, cb.QuoteStyle)
 	return bones.Generate(logger, fds, cb.MethodDir, cb.Force, cb.Targets, opts)
 }

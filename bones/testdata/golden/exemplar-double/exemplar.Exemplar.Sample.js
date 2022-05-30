@@ -2,14 +2,14 @@
 
 // Input:
 // {
-//   request: {
+//   request: {  // SampleRequest
 //     name: "",  // string
 //   },
 // }
 
 function Sample(input) {
   return {
-    response: {
+    response: {  // SampleResponse
       aBool: false,  // bool
       aInt32: 0,  // int32
       aSint32: 0,  // sint32
@@ -42,30 +42,17 @@ function Sample(input) {
           value: {  // SampleMessage2
             weirdFieldName1: "",  // string
             aStringList: [""],  // repeated string
-            aMsgList: [  // repeated SampleMessage1
-              {
-                field: "",  // string
-                repeat: [0],  // repeated int32
-              }
-            ],
+            aMsgList: [{}],  // repeated SampleMessage1 (see example above)
           },
         }
       ],
       aIntList: [0],  // repeated int32
       aEnumList: ["SAMPLE_ENUM_FIRST"],  // repeated SampleEnum
-      aMessageList: [  // repeated SampleMessage1
-        {
-          field: "",  // string
-          repeat: [0],  // repeated int32
-        }
-      ],
+      aMessageList: [{}],  // repeated SampleMessage1 (see example above)
       // aStringOneof: "",  // string (one-of a_oneof)
       // aEnumOneof: "SAMPLE_ENUM_FIRST",  // SampleEnum (one-of a_oneof)
-      // aMessageOneof: {  // SampleMessage1 (one-of a_oneof)
-      //   field: "",  // string
-      //   repeat: [0],  // repeated int32
-      // },
-      recursive: {},  // SampleResponse (recursive)
+      // aMessageOneof: {},  // SampleMessage1 (one-of a_oneof, see example above)
+      recursive: {},  // SampleResponse (see example above)
     },
   }
 }

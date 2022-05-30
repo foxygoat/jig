@@ -3,14 +3,14 @@
 // Input:
 // {
 //   stream: [
-//     {
+//     {  // HelloRequest
 //       firstName: "",  // string
 //     },
 //   ],
 // }
 
 function(input) {
-  response: {
+  response: {  // HelloResponse
     greeting: "",  // string
   },
 }

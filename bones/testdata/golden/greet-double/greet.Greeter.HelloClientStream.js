@@ -3,7 +3,7 @@
 // Input:
 // {
 //   stream: [
-//     {
+//     {  // HelloRequest
 //       firstName: "",  // string
 //     },
 //   ],
@@ -11,7 +11,7 @@
 
 function HelloClientStream(input) {
   return {
-    response: {
+    response: {  // HelloResponse
       greeting: "",  // string
     },
   }

@@ -2,14 +2,14 @@
 
 // Input:
 // {
-//   request: {
+//   request: {  // HelloRequest
 //     firstName: "",  // string
 //   },
 // }
 
 function Hello(input) {
   return {
-    response: {
+    response: {  // HelloResponse
       greeting: "",  // string
     },
   }

@@ -27,9 +27,9 @@ func TestGenerateGolden(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
 
-			err := Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, Formatter{QuoteStyle: tc.quoteStyle})
+			err := Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, NewFormatter(Jsonnet, tc.quoteStyle))
 			require.NoError(t, err)
-			err = Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, Formatter{Lang: JS, QuoteStyle: tc.quoteStyle})
+			err = Generate(log.DiscardLogger, getFDS(t, tc.pbFile), dir, false, nil, NewFormatter(JS, tc.quoteStyle))
 			require.NoError(t, err)
 			requireSameContent(t, tc.goldenDir, dir)
 		})

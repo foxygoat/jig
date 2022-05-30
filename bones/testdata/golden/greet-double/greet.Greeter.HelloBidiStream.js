@@ -2,7 +2,7 @@
 
 // Input:
 // {
-//   request: {
+//   request: {  // HelloRequest
 //     firstName: "",  // string
 //   },
 // }
@@ -10,7 +10,7 @@
 function HelloBidiStream(input) {
   return {
     stream: [
-      {
+      {  // HelloResponse
         greeting: "",  // string
       },
     ],
