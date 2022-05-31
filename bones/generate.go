@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 
+	"foxygo.at/jig/log"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -15,24 +16,24 @@ import (
 // slice. Method exemplars are written to stdout if methodDir is empty,
 // otherwise each method is written to a separate file in that directory.
 // Existing files will not be overwritten unless force is true.
-func Generate(fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatter Formatter) error {
+func Generate(logger log.Logger, fds *descriptorpb.FileDescriptorSet, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	files, err := protodesc.NewFiles(fds)
 	if err != nil {
 		return err
 	}
 
 	files.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-		err = genFile(fd, methodDir, force, targets, formatter)
+		err = genFile(logger, fd, methodDir, force, targets, formatOpts)
 		return err == nil
 	})
 
 	return err
 }
 
-func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatter Formatter) error {
+func genFile(logger log.Logger, fd protoreflect.FileDescriptor, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	for _, sd := range services(fd) {
 		for _, md := range methods(sd) {
-			if err := genMethod(md, methodDir, force, targets, formatter); err != nil {
+			if err := genMethod(logger, md, methodDir, force, targets, formatOpts); err != nil {
 				return err
 			}
 		}
@@ -40,12 +41,13 @@ func genFile(fd protoreflect.FileDescriptor, methodDir string, force bool, targe
 	return nil
 }
 
-func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatter Formatter) error {
+func genMethod(logger log.Logger, md protoreflect.MethodDescriptor, methodDir string, force bool, targets []string, formatOpts *FormatterOptions) error {
 	var err error
 	if !match(md, targets) {
 		return nil
 	}
 
+	formatter := newFormatter(formatOpts)
 	f := os.Stdout
 	if methodDir != "" {
 		flag := os.O_WRONLY | os.O_CREATE | os.O_TRUNC
@@ -59,10 +61,12 @@ func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, t
 		if err != nil {
 			if os.IsExist(err) && !force {
 				// skip existing files when not forcing
+				logger.Debugf("skip existing file %q, use --force to override", md.FullName())
 				return nil
 			}
 			return err
 		}
+		logger.Debugf("created file %q", filename)
 		defer func() {
 			cerr := f.Close()
 			if err == nil {
@@ -71,6 +75,7 @@ func genMethod(md protoreflect.MethodDescriptor, methodDir string, force bool, t
 		}()
 	}
 
+	logger.Debugf("writing bones of %q", md.FullName())
 	_, err = fmt.Fprintln(f, formatter.MethodExemplar(md))
 	// Print a separator on stdout to separate multiple exemplars
 	if f == os.Stdout {

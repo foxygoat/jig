@@ -39,7 +39,7 @@ tidy:  ## Tidy go modules with "go mod tidy"
 # --- Test ---------------------------------------------------------------------
 COVERFILE = $(O)/coverage.txt
 
-test: $(O) ## Run tests and generate a coverage file
+test: | $(O) ## Run tests and generate a coverage file
 	go test -coverprofile=$(COVERFILE) ./...
 
 check-coverage: test  ## Check that test coverage meets the required level
@@ -48,16 +48,24 @@ check-coverage: test  ## Check that test coverage meets the required level
 cover: test  ## Show test coverage in your browser
 	go tool cover -html=$(COVERFILE)
 
-RUN_BONES = $(O)/jig bones --force --language=$(1) --quote-style=$(2) --proto-set pb/$(3)/$(4) --method-dir bones/testdata/golden/$(3)-$(2)
+RUN_BONES = $(O)/jig bones --force --language=$(1) --quote-style=$(2) --proto-set pb/$(3)/$(4) --minimal=$(5) --method-dir bones/testdata/golden/$(3)-$(2)-$(5)-minimal
 golden: build proto  ## Generate golden test files
-	$(call RUN_BONES,jsonnet,double,exemplar,exemplar.pb)
-	$(call RUN_BONES,jsonnet,double,greet,greeter.pb)
-	$(call RUN_BONES,jsonnet,single,exemplar,exemplar.pb)
-	$(call RUN_BONES,jsonnet,single,greet,greeter.pb)
-	$(call RUN_BONES,js,double,exemplar,exemplar.pb)
-	$(call RUN_BONES,js,double,greet,greeter.pb)
-	$(call RUN_BONES,js,single,exemplar,exemplar.pb)
-	$(call RUN_BONES,js,single,greet,greeter.pb)
+	$(call RUN_BONES,jsonnet,double,exemplar,exemplar.pb,no)
+	$(call RUN_BONES,jsonnet,double,exemplar,exemplar.pb,yes)
+	$(call RUN_BONES,jsonnet,double,greet,greeter.pb,no)
+	$(call RUN_BONES,jsonnet,double,greet,greeter.pb,yes)
+	$(call RUN_BONES,jsonnet,single,exemplar,exemplar.pb,no)
+	$(call RUN_BONES,jsonnet,single,exemplar,exemplar.pb,yes)
+	$(call RUN_BONES,jsonnet,single,greet,greeter.pb,no)
+	$(call RUN_BONES,jsonnet,single,greet,greeter.pb,yes)
+	$(call RUN_BONES,js,double,exemplar,exemplar.pb,no)
+	$(call RUN_BONES,js,double,exemplar,exemplar.pb,yes)
+	$(call RUN_BONES,js,double,greet,greeter.pb,no)
+	$(call RUN_BONES,js,double,greet,greeter.pb,yes)
+	$(call RUN_BONES,js,single,exemplar,exemplar.pb,no)
+	$(call RUN_BONES,js,single,exemplar,exemplar.pb,yes)
+	$(call RUN_BONES,js,single,greet,greeter.pb,no)
+	$(call RUN_BONES,js,single,greet,greeter.pb,yes)
 
 CHECK_COVERAGE = awk -F '[ \t%]+' '/^total:/ {print; if ($$3 < $(COVERAGE)) exit 1}'
 FAIL_COVERAGE = { echo '$(COLOUR_RED)FAIL - Coverage below $(COVERAGE)%$(COLOUR_NORMAL)'; exit 1; }

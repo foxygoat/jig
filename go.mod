@@ -8,7 +8,6 @@ require (
 	github.com/alecthomas/protobuf v0.0.0-20220411053735-2a9f60104b87
 	github.com/google/go-jsonnet v0.17.0
 	github.com/stretchr/testify v1.7.0
-	golang.org/x/exp v0.0.0-20220414153411-bcd21879b8fd
 	golang.org/x/net v0.0.0-20210405180319-a5a99cb37ef4
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/genproto v0.0.0-20220407144326-9054f6ed7bac

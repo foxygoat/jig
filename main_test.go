@@ -18,12 +18,11 @@ func TestHTTPRuleServer(t *testing.T) {
 		Proto:     []string{"httpgreet/httpgreet.proto"},
 		ProtoPath: []string{"proto"},
 	}
-	logger := log.NewLogger(io.Discard, log.LogLevelError)
-	opts, err := c.getServerOptions(logger)
+	opts, err := c.getServerOptions(log.DiscardLogger)
 	require.NoError(t, err)
 
 	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("serve/testdata/httpgreet"), opts...)
-	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, logger, nil))
+	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, log.DiscardLogger, nil))
 	ts.Start()
 	defer ts.Stop()
 

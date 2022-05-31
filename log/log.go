@@ -66,3 +66,5 @@ func NewLogger(w io.Writer, minLevel LogLevel) Logger {
 		}
 	})
 }
+
+var DiscardLogger = NewLogger(io.Discard, LogLevelError)

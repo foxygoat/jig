@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
-	"io"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
@@ -17,7 +16,7 @@ import (
 )
 
 func newTestServer() *TestServer {
-	withLogger := WithLogger(log.NewLogger(io.Discard, log.LogLevelError))
+	withLogger := WithLogger(log.DiscardLogger)
 	return NewTestServer(JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 }
 

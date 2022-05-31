@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"foxygo.at/jig/bones"
 	"foxygo.at/jig/log"
@@ -17,9 +18,10 @@ import (
 var version = "v0.0.0"
 
 type config struct {
-	Version kong.VersionFlag `short:"V" help:"Print version information" group:"Other"`
-	Serve   cmdServe         `cmd:"" help:"Serve GRPC services"`
-	Bones   cmdBones         `cmd:"" help:"Generate skeleton jsonnet methods"`
+	Version  kong.VersionFlag `short:"V" help:"Print version information" group:"Other"`
+	LogLevel log.LogLevel     `short:"L" help:"Log level" default:"error"`
+	Serve    cmdServe         `cmd:"" help:"Serve GRPC services"`
+	Bones    cmdBones         `cmd:"" help:"Generate skeleton jsonnet methods"`
 }
 
 type cmdServe struct {
@@ -28,9 +30,8 @@ type cmdServe struct {
 	Proto     []string `short:"P" help:"Proto source .proto files containing service"`
 	ProtoPath []string `short:"I" help:"Import paths for --proto files' dependencies"`
 
-	LogLevel log.LogLevel `help:"Server logging level" default:"error"`
-	Listen   string       `short:"l" default:"localhost:8080" help:"TCP listen address"`
-	HTTP     bool         `short:"h" help:"Serve on HTTP too, using HttpRule annotations"`
+	Listen string `short:"l" default:"localhost:8080" help:"TCP listen address"`
+	HTTP   bool   `short:"h" help:"Serve on HTTP too, using HttpRule annotations"`
 
 	Dirs []string `arg:"" help:"Directory containing method definitions and optionally protoset .pb file"`
 }
@@ -47,17 +48,26 @@ type cmdBones struct {
 
 	Language   bones.Lang       `help:"Target language" default:"jsonnet"`
 	QuoteStyle bones.QuoteStyle `help:"Print single or double quotes" default:"double"`
+	Minimal    bool             `help:"Print a minimal method stub without zero values for input and output"`
 }
 
 func main() {
 	cli := &config{}
 	kctx := kong.Parse(cli, kong.Vars{"version": version})
-	err := kctx.Run()
+	err := kctx.Run(cli.LogLevel)
 	kctx.FatalIfErrorf(err)
 }
 
-func (cs *cmdServe) Run() error {
-	logger := log.NewLogger(os.Stderr, cs.LogLevel)
+func (cli *config) AfterApply() error {
+	debug := strings.ToLower(os.Getenv("DEBUG"))
+	if debug == "1" || debug == "yes" || debug == "true" {
+		cli.LogLevel = log.LogLevelDebug
+	}
+	return nil
+}
+
+func (cs *cmdServe) Run(logLevel log.LogLevel) error {
+	logger := log.NewLogger(os.Stderr, logLevel)
 	opts, err := cs.getServerOptions(logger)
 	if err != nil {
 		return err
@@ -89,9 +99,11 @@ func (cs *cmdServe) getServerOptions(logger log.Logger) ([]serve.Option, error) 
 	return opts, nil
 }
 
-func (cb *cmdBones) Run() error {
+func (cb *cmdBones) Run(logLevel log.LogLevel) error {
+	logger := log.NewLogger(os.Stderr, logLevel)
 	fds := &descriptorpb.FileDescriptorSet{}
 	if cb.ProtoSet != "" {
+		logger.Debugf("read and unmarshal FileDescriptSet file %q", cb.ProtoSet)
 		b, err := os.ReadFile(cb.ProtoSet)
 		if err != nil {
 			return err
@@ -100,6 +112,7 @@ func (cb *cmdBones) Run() error {
 			return err
 		}
 	} else {
+		logger.Debugf("compiling FileDescriptorSet")
 		var err error
 		includeImports := true
 		fds, err = compiler.Compile([]string{cb.Proto}, cb.ProtoPath, includeImports)
@@ -108,9 +121,10 @@ func (cb *cmdBones) Run() error {
 		}
 	}
 
-	opts := bones.FormatOptions{
+	opts := &bones.FormatterOptions{
 		Lang:       cb.Language,
 		QuoteStyle: cb.QuoteStyle,
+		Minimal:    cb.Minimal,
 	}
-	return bones.Generate(fds, cb.MethodDir, cb.Force, cb.Targets, opts)
+	return bones.Generate(logger, fds, cb.MethodDir, cb.Force, cb.Targets, opts)
 }
