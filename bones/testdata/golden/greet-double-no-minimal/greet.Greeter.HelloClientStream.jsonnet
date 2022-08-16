@@ -9,7 +9,7 @@
 //   ],
 // }
 
-function(input) {
+function(input, metadata) {
   response: {  // HelloResponse
     greeting: "",  // string
   },

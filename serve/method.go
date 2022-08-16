@@ -39,7 +39,7 @@ func (s *Server) unaryClientCall(md protoreflect.MethodDescriptor, ss grpc.Serve
 		return err
 	}
 
-	return s.evaluate(md, input, ss, s.Files)
+	return s.evaluate(mdata, md, input, ss, s.Files)
 }
 
 func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -61,7 +61,7 @@ func (s *Server) streamingClientCall(md protoreflect.MethodDescriptor, ss grpc.S
 		return err
 	}
 
-	return s.evaluate(md, input, ss, s.Files)
+	return s.evaluate(mdata, md, input, ss, s.Files)
 }
 
 func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.ServerStream) error {
@@ -81,15 +81,19 @@ func (s *Server) streamingBidiCall(md protoreflect.MethodDescriptor, ss grpc.Ser
 		if err != nil {
 			return err
 		}
-		if err := s.evaluate(md, input, ss, s.Files); err != nil {
+		if err := s.evaluate(mdata, md, input, ss, s.Files); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (s *Server) evaluate(md protoreflect.MethodDescriptor, input string, ss grpc.ServerStream, reg *registry.Files) error {
-	output, err := s.eval.Evaluate(string(md.FullName()), input, s.fs)
+func (s *Server) evaluate(mdata metadata.MD, md protoreflect.MethodDescriptor, input string, ss grpc.ServerStream, reg *registry.Files) error {
+	output, err := s.eval.Evaluate(Request{
+		Metadata: mdata,
+		Method:   string(md.FullName()),
+		Input:    input,
+	}, s.fs)
 	if err != nil {
 		return err
 	}

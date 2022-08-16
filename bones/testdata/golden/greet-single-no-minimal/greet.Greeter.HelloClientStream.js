@@ -9,7 +9,7 @@
 //   ],
 // }
 
-function HelloClientStream(input) {
+function HelloClientStream(input, metadata) {
   return {
     response: {  // HelloResponse
       greeting: '',  // string

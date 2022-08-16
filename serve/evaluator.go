@@ -1,26 +1,36 @@
 package serve
 
 import (
+	"encoding/json"
 	"io/fs"
 
 	"github.com/google/go-jsonnet"
+	"google.golang.org/grpc/metadata"
 )
 
-type Evaluator interface {
-	Evaluate(method, input string, vfs fs.FS) (output string, err error)
+type Request struct {
+	Metadata metadata.MD
+	Method   string
+	Input    string
 }
 
-type EvaluatorFunc func(method, input string, vfs fs.FS) (output string, err error)
+type Evaluator interface {
+	Evaluate(request Request, vfs fs.FS) (output string, err error)
+}
 
-func (ef EvaluatorFunc) Evaluate(method, input string, vfs fs.FS) (output string, err error) {
-	return ef(method, input, vfs)
+type EvaluatorFunc func(request Request, vfs fs.FS) (output string, err error)
+
+func (ef EvaluatorFunc) Evaluate(request Request, vfs fs.FS) (output string, err error) {
+	return ef(request, vfs)
 }
 
 func JsonnetEvaluator() Evaluator {
-	return EvaluatorFunc(func(method, input string, vfs fs.FS) (output string, err error) {
+	return EvaluatorFunc(func(request Request, vfs fs.FS) (output string, err error) {
 		vm := jsonnet.MakeVM()
-		vm.TLACode("input", input)
-		filename := method + ".jsonnet"
+		metadataJSON, _ := json.Marshal(request.Metadata)
+		vm.TLACode("input", request.Input)
+		vm.TLACode("metadata", string(metadataJSON))
+		filename := request.Method + ".jsonnet"
 		b, err := fs.ReadFile(vfs, filename)
 		if err != nil {
 			return "", err

@@ -6,7 +6,7 @@
 //   },
 // }
 
-function Hello(input) {
+function Hello(input, metadata) {
   return {
     response: {  // greet.HelloResponse
     },

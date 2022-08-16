@@ -8,7 +8,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   response: {
     greeting: "httpgreet: Hello, " + input.request.firstName,  // string
   },

@@ -7,7 +7,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   response: {  // SampleResponse
     aBool: false,  // bool
     aInt32: 0,  // int32

@@ -3,7 +3,7 @@
 Jig lets you use [jsonnet] to implement gRPC methods, e.g.:
 
     // Greeter.Hello
-    function(input) {
+    function(input, metadata) {
       response: {
         greeting: '💃 : Hello ' + input.request.firstName,
       },
@@ -62,7 +62,7 @@ the response to send back to the gRPC client.
 If the method is a unary or client-streaming method, the result must have a
 `response` field that contains the response message encoded as JSON:
 
-    function(input) {
+    function(input, metadata) {
         response: { ...json-encoded gRPC response protobuf... }
     }
 
@@ -70,13 +70,13 @@ If the method is a server- or bidirectional streaming method, the result must
 have a `stream` field that contains an array of response messages encoded as
 JSON:
 
-    function(input) {
+    function(input, metadata) {
         stream: [ {response1}, {response2}, ... ]
     }
 
 A [gRPC status] can be returned in the `status` field:
 
-    function(input) {
+    function(input, metadata) {
         status: {
             code: 3,
             message: 'Field "foo" failed validation: 0 < foo < 10',

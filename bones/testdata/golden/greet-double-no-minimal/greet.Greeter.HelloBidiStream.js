@@ -7,7 +7,7 @@
 //   },
 // }
 
-function HelloBidiStream(input) {
+function HelloBidiStream(input, metadata) {
   return {
     stream: [
       {  // HelloResponse

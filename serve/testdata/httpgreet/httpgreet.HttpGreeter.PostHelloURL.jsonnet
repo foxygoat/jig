@@ -8,7 +8,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   response: {
     greeting: "Thanks for the post and the path, " + input.request.firstName,  // string
   },

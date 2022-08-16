@@ -8,7 +8,7 @@
 //   ],
 // }
 
-function HelloClientStream(input) {
+function HelloClientStream(input, metadata) {
   return {
     response: {  // greet.HelloResponse
     },

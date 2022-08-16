@@ -7,7 +7,7 @@
 //   },
 // }
 
-function WellKnown(input) {
+function WellKnown(input, metadata) {
   return {
     response: {  // WellKnownSample
       any: {  // Any

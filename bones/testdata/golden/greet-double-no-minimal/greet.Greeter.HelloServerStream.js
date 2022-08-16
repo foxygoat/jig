@@ -7,7 +7,7 @@
 //   },
 // }
 
-function HelloServerStream(input) {
+function HelloServerStream(input, metadata) {
   return {
     stream: [
       {  // HelloResponse

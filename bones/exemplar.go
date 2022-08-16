@@ -82,10 +82,10 @@ func (f *formatter) MethodExemplar(md protoreflect.MethodDescriptor) exemplar {
 		ome.prepend("response: ")
 	}
 	if f.opts.Lang == Jsonnet {
-		ome.nest("function(input) {", "}")
+		ome.nest("function(input, metadata) {", "}")
 	} else {
 		ome.nest("return {", "}")
-		ome.nest("function "+string(md.Name())+"(input) {", "}")
+		ome.nest("function "+string(md.Name())+"(input, metadata) {", "}")
 	}
 
 	var methodType string

@@ -6,7 +6,7 @@
 //   },
 // }
 
-function Sample(input) {
+function Sample(input, metadata) {
   return {
     response: {  // exemplar.SampleResponse
     },

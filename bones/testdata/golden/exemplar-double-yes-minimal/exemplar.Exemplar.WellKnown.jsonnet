@@ -6,7 +6,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   response: {  // exemplar.WellKnownSample
   },
 }

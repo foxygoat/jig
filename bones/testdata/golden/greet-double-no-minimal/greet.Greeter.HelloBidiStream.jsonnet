@@ -7,7 +7,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   stream: [
     {  // HelloResponse
       greeting: "",  // string

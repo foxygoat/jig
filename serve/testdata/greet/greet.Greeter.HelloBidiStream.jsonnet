@@ -1,4 +1,4 @@
-function(input)
+function(input, metadata)
   if input.request.firstName != 'Bart' then
     {
       stream: [{ greeting: '💃 jig [bidi]: Hello ' + input.request.firstName }],

@@ -7,7 +7,7 @@
 //   },
 // }
 
-function Sample(input) {
+function Sample(input, metadata) {
   return {
     response: {  // SampleResponse
       aBool: false,  // bool

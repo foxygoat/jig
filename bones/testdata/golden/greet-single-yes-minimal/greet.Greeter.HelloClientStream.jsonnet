@@ -8,7 +8,7 @@
 //   ],
 // }
 
-function(input) {
+function(input, metadata) {
   response: {  // greet.HelloResponse
   },
 }

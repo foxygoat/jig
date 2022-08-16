@@ -7,7 +7,7 @@
 //   },
 // }
 
-function(input) {
+function(input, metadata) {
   response: {  // WellKnownSample
     any: {  // Any
       "@type": "type.googleapis.com/google.protobuf.Duration",
