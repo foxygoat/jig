@@ -34,7 +34,7 @@ func NewService(files FileDescriptorRanger) *Service {
 	r := cloneRegistry(files)
 	// Ignore the RegisterFile error on the assumption it means the reflection
 	// protofile is already registered.
-	_ = r.RegisterFile(pb.File_reflection_grpc_reflection_v1alpha_reflection_proto)
+	_ = r.RegisterFile(pb.File_grpc_reflection_v1alpha_reflection_proto)
 	return &Service{registry: r}
 }
 

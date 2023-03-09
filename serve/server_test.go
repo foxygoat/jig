@@ -100,7 +100,7 @@ seconds:42
 Header: map[content-type:[application/grpc]]
 Greeting: 💃 jig [bidi]: Hello 1
 Trailer: map[]`
-	bidiErrWant := " rpc error: code = Unknown desc = transport: the stream is done or WriteHeader was already called"
+	bidiErrWant := " rpc error: code = Internal desc = transport: SendHeader called multiple times"
 	bidiWant2 := `
 Header: map[content-type:[application/grpc] eat:[his shorts]]
 Trailer: map[]`
