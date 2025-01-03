@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 
@@ -79,7 +80,7 @@ func (cs *cmdServe) Run(logLevel log.LogLevel) error {
 	}
 
 	if cs.HTTP {
-		h := httprule.NewServer(s.Files, s.UnknownHandler, logger, nil)
+		h := httprule.NewServer(s.Files, s.UnknownHandler, logger, nil, http.NotFoundHandler())
 		s.SetHTTPHandler(h)
 	}
 

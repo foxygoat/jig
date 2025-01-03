@@ -29,13 +29,15 @@ type Server struct {
 	httpMethods []*httpMethod
 	grpcHandler grpc.StreamHandler
 	log         log.Logger
+	next        http.Handler
 }
 
-func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger, httpRuleTemplates []*annotations.HttpRule) *Server {
+func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger, httpRuleTemplates []*annotations.HttpRule, next http.Handler) *Server {
 	return &Server{
 		httpMethods: loadHTTPRules(l, files, httpRuleTemplates),
 		grpcHandler: handler,
 		log:         l,
+		next:        next,
 	}
 }
 
@@ -46,7 +48,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.NotFound(w, r)
+
+	s.next.ServeHTTP(w, r)
 }
 
 // Serve a google.api.http annotated method as HTTP
