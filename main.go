@@ -79,7 +79,10 @@ func (cs *cmdServe) Run(logLevel log.LogLevel) error {
 	}
 
 	if cs.HTTP {
-		h := httprule.NewServer(s.Files, s.UnknownHandler, logger, nil)
+		h, err := httprule.NewHandler(s.Files, s.UnknownHandler, httprule.WithLogger(logger))
+		if err != nil {
+			return err
+		}
 		s.SetHTTPHandler(h)
 	}
 
