@@ -84,12 +84,29 @@ func TestHTTP(t *testing.T) {
 	})
 
 	t.Run("return 404 for invalid path", func(t *testing.T) {
+		// GET is not handled
 		req, err := http.NewRequest("GET", url, nil)
 		require.NoError(t, err)
 		req.Header.Set("Accept", "application/json; charset=utf-8")
 		resp, err := http.DefaultClient.Do(req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	teapot := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "418 I'm a HyperTextTeaPot", http.StatusTeapot)
+	})
+	h, err = NewHandler(ts.Files, ts.UnknownHandler, WithLogger(log.DiscardLogger), WithDefaultHandler(teapot))
+	require.NoError(t, err)
+	ts.SetHTTPHandler(h)
+	t.Run("return 418 for invalid path by next handler", func(t *testing.T) {
+		// GET is not handled
+		req, err := http.NewRequest("GET", url, nil)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "application/json; charset=utf-8")
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusTeapot, resp.StatusCode)
 	})
 }
 

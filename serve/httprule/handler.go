@@ -27,10 +27,11 @@ type httpMethod struct {
 
 // Handler serves protobuf methods, annotated using httprule options, over HTTP.
 type Handler struct {
-	httpMethods   []*httpMethod
-	grpcHandler   grpc.StreamHandler
-	log           log.Logger
-	ruleTemplates []*annotations.HttpRule
+	httpMethods    []*httpMethod
+	grpcHandler    grpc.StreamHandler
+	log            log.Logger
+	ruleTemplates  []*annotations.HttpRule
+	defaultHandler http.Handler
 }
 
 // NewHandler returns a new [Handler] that implements [http.Handler] that will
@@ -38,7 +39,10 @@ type Handler struct {
 // registry. Requests that match a method are dispatched to the given gRPC
 // handler.
 func NewHandler(files *registry.Files, handler grpc.StreamHandler, options ...Option) (*Handler, error) {
-	h := &Handler{grpcHandler: handler}
+	h := &Handler{
+		grpcHandler:    handler,
+		defaultHandler: http.NotFoundHandler(),
+	}
 	for _, opt := range options {
 		if err := opt(h); err != nil {
 			return nil, err
@@ -73,6 +77,18 @@ func WithRuleTemplates(httpRuleTemplates []*annotations.HttpRule) Option {
 	}
 }
 
+// WithDefaultHandler is an [Option] to configure a [Handler] with a fallback
+// handler when the request being handled does not match any of the gRPC
+// methods the [Handler] is configured with. By default the [Handler] will
+// return a 404 NotFound response. If a default handler is supplied, it will be
+// called instead of returning that 404 NotFound response.
+func WithDefaultHandler(next http.Handler) Option {
+	return func(h *Handler) error {
+		h.defaultHandler = next
+		return nil
+	}
+}
+
 // Server is a [Handler], and exists for backwards compatibility.
 //
 // Deprecated: Use [Handler] instead.
@@ -93,7 +109,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	http.NotFound(w, r)
+	h.defaultHandler.ServeHTTP(w, r)
 }
 
 // Serve a google.api.http annotated method as HTTP
