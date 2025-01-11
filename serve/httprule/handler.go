@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 
 	"foxygo.at/jig/log"
@@ -24,42 +25,104 @@ type httpMethod struct {
 	rule *annotations.HttpRule
 }
 
-// Server serves protobuf methods, annotated using httprule options, over HTTP.
-type Server struct {
-	httpMethods []*httpMethod
-	grpcHandler grpc.StreamHandler
-	log         log.Logger
+// Handler serves protobuf methods, annotated using httprule options, over HTTP.
+type Handler struct {
+	httpMethods    []*httpMethod
+	grpcHandler    grpc.StreamHandler
+	log            log.Logger
+	ruleTemplates  []*annotations.HttpRule
+	defaultHandler http.Handler
 }
 
-func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger, httpRuleTemplates []*annotations.HttpRule) *Server {
-	return &Server{
-		httpMethods: loadHTTPRules(l, files, httpRuleTemplates),
-		grpcHandler: handler,
-		log:         l,
+// NewHandler returns a new [Handler] that implements [http.Handler] that will
+// dispatch HTTP requests matching the HttpRule annotations in the given
+// registry. Requests that match a method are dispatched to the given gRPC
+// handler.
+func NewHandler(files *registry.Files, handler grpc.StreamHandler, options ...Option) (*Handler, error) {
+	h := &Handler{
+		grpcHandler:    handler,
+		defaultHandler: http.NotFoundHandler(),
+	}
+	for _, opt := range options {
+		if err := opt(h); err != nil {
+			return nil, err
+		}
+	}
+	if h.log == nil {
+		h.log = log.NewLogger(os.Stderr, log.LogLevelError)
+	}
+	h.httpMethods = loadHTTPRules(h.log, files, h.ruleTemplates)
+
+	return h, nil
+}
+
+// Option is a function option for use with [NewHandler].
+type Option func(h *Handler) error
+
+// WithLogger is an [Option] to configure a [Handler] with the given logger.
+func WithLogger(l log.Logger) Option {
+	return func(h *Handler) error {
+		h.log = l
+		return nil
 	}
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	for _, method := range s.httpMethods {
+// WithRuleTemplates is an [Option] to configure a [Handler] to provide a http
+// rule template to be used for gRPC methods that do not have an HttpRule
+// annotation.
+func WithRuleTemplates(httpRuleTemplates []*annotations.HttpRule) Option {
+	return func(h *Handler) error {
+		h.ruleTemplates = httpRuleTemplates
+		return nil
+	}
+}
+
+// WithDefaultHandler is an [Option] to configure a [Handler] with a fallback
+// handler when the request being handled does not match any of the gRPC
+// methods the [Handler] is configured with. By default the [Handler] will
+// return a 404 NotFound response. If a default handler is supplied, it will be
+// called instead of returning that 404 NotFound response.
+func WithDefaultHandler(next http.Handler) Option {
+	return func(h *Handler) error {
+		h.defaultHandler = next
+		return nil
+	}
+}
+
+// Server is a [Handler], and exists for backwards compatibility.
+//
+// Deprecated: Use [Handler] instead.
+type Server = Handler
+
+// NewServer returns a new Handler.
+//
+// Deprecated: Use [NewHandler] instead. [Handler] used to be called [Server].
+func NewServer(files *registry.Files, handler grpc.StreamHandler, l log.Logger, httpRuleTemplates []*annotations.HttpRule) *Handler {
+	h, _ := NewHandler(files, handler, WithLogger(l), WithRuleTemplates(httpRuleTemplates))
+	return h
+}
+
+func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	for _, method := range h.httpMethods {
 		if vars := MatchRequest(method.rule, r); vars != nil {
-			s.serveHTTPMethod(method, vars, w, r)
+			h.serveHTTPMethod(method, vars, w, r)
 			return
 		}
 	}
-	http.NotFound(w, r)
+	h.defaultHandler.ServeHTTP(w, r)
 }
 
 // Serve a google.api.http annotated method as HTTP
-func (s *Server) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.ResponseWriter, r *http.Request) {
+func (h *Handler) serveHTTPMethod(m *httpMethod, vars map[string]string, w http.ResponseWriter, r *http.Request) {
 	// TODO: Handle streaming calls.
 	ss := &serverStream{
 		req:        r,
 		respWriter: w,
 		rule:       m.rule,
 		vars:       vars,
-		log:        s.log,
+		log:        h.log,
 	}
-	if err := s.grpcHandler(m.desc.FullName(), ss); err != nil {
+	if err := h.grpcHandler(m.desc.FullName(), ss); err != nil {
 		ss.writeError(err)
 		return
 	}
