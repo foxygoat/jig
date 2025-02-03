@@ -99,7 +99,7 @@ func TestExemplar(t *testing.T) {
 		},
 		AMap: map[int32]bool{0: false},
 		ADeepMap: map[string]*exemplar.SampleResponse_SampleMessage2{
-			"": {
+			"key": {
 				Weird_FieldName_1_: "",
 				AStringList:        []string{""},
 				AMsgList:           []*exemplar.SampleResponse_SampleMessage1{{}},

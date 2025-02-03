@@ -228,25 +228,67 @@ func (f *formatter) FieldExemplar(fd protoreflect.FieldDescriptor) exemplar {
 // The value is as per the exemplar form for the fields type. See the other
 // *Exemplar functions for details of those.
 //
-// Map fields are emitted as repeated key/value message pairs in the expanded
-// backward-compatible form, as opposed to {key: value, ...} objects.
+// Map fields are emitted as objects with non-string keys converted to strings.
 //
 // Repeated fields are emitted with a single element exemplar of the repeated
 // type.
 func (f *formatter) FieldValueExemplar(fd protoreflect.FieldDescriptor) exemplar {
 	var e exemplar
-	switch fd.Kind() {
-	case protoreflect.EnumKind:
+
+	switch kind := fd.Kind(); {
+	case fd.IsMap():
+		e = f.MapExemplar(fd)
+	case kind == protoreflect.EnumKind:
 		e = f.EnumExemplar(fd)
-	case protoreflect.MessageKind, protoreflect.GroupKind:
+	case kind == protoreflect.MessageKind || kind == protoreflect.GroupKind:
 		e = f.MessageExemplar(fd.Message(), "")
 	default:
 		e = f.ScalarExemplar(fd.Kind())
 	}
 
-	if fd.Cardinality() == protoreflect.Repeated {
+	// Maps appear as repeated in proto representation but are not rendered
+	// that way in JSON.
+	if fd.Cardinality() == protoreflect.Repeated && !fd.IsMap() {
 		e.nestCompact("[", "]")
 	}
+
+	return e
+}
+
+// MapExemplar returns an exemplar for a sample value for a map. An empty
+// exemplar is returned if the field is not a map.
+//
+// Maps exemplars are emitted as an object with a single entry with the key
+// type as the key and the value type as the value. Non-string keys are
+// converted to strings.
+//
+// Reference: https://protobuf.dev/programming-guides/editions/#maps
+func (f *formatter) MapExemplar(fd protoreflect.FieldDescriptor) exemplar {
+	var e exemplar
+	if !fd.IsMap() {
+		return e
+	}
+
+	e = f.FieldValueExemplar(fd.MapValue())
+
+	var key string
+	switch fd.MapKey().Kind() {
+	case protoreflect.BoolKind:
+		key = `"false"`
+	case protoreflect.Int32Kind, protoreflect.Sint32Kind, protoreflect.Uint32Kind,
+		protoreflect.Int64Kind, protoreflect.Sint64Kind, protoreflect.Uint64Kind,
+		protoreflect.Sfixed32Kind, protoreflect.Fixed32Kind,
+		protoreflect.Sfixed64Kind, protoreflect.Fixed64Kind:
+		key = `"0"`
+	case protoreflect.StringKind:
+		key = `"key"`
+	default:
+		key = `"invalid_type"`
+	}
+
+	e.prepend(key + ": ")
+	e.append(",")
+	e.nest("{", "}")
 
 	return e
 }
