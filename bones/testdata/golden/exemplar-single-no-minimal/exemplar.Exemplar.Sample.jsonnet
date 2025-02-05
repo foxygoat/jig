@@ -29,9 +29,9 @@ function(input) {
       field: '',  // string
       repeat: [0],  // repeated int32
     },
-    aMap: [  // map<string, bool>
+    aMap: [  // map<int32, bool>
       {
-        key: '',  // string
+        key: 0,  // int32
         value: false,  // bool
       }
     ],
