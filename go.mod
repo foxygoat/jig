@@ -6,6 +6,7 @@ require (
 	foxygo.at/protog v0.0.14
 	github.com/alecthomas/kong v0.4.1
 	github.com/alecthomas/protobuf v0.0.0-20220411053735-2a9f60104b87
+	github.com/google/go-cmp v0.5.9
 	github.com/google/go-jsonnet v0.17.0
 	github.com/stretchr/testify v1.7.0
 	golang.org/x/net v0.7.0
