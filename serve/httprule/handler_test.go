@@ -3,7 +3,6 @@ package httprule
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"strings"
@@ -36,7 +35,7 @@ func TestHTTP(t *testing.T) {
 		require.NoError(t, err)
 
 		respPb := &greet.HelloResponse{}
-		raw, err := ioutil.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, protojson.Unmarshal(raw, respPb))
@@ -54,7 +53,7 @@ func TestHTTP(t *testing.T) {
 		require.NoError(t, err)
 
 		respPb := &greet.HelloResponse{}
-		raw, err := ioutil.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, proto.Unmarshal(raw, respPb))
@@ -73,7 +72,7 @@ func TestHTTP(t *testing.T) {
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 		respPb := &statuspb.Status{}
-		raw, err := ioutil.ReadAll(resp.Body)
+		raw, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		require.NoError(t, protojson.Unmarshal(raw, respPb))
@@ -131,7 +130,7 @@ func TestHTTPRuleInterpolation(t *testing.T) {
 	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	raw, err := ioutil.ReadAll(resp.Body)
+	raw, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	expected := `{"greeting": "Simply, hello, "}`
@@ -145,7 +144,7 @@ func TestHTTPRuleInterpolation(t *testing.T) {
 	resp, err = http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	raw, err = ioutil.ReadAll(resp.Body)
+	raw, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	expected = `{"greeting": "Simply, hello, fox"}`

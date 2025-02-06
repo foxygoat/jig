@@ -2,7 +2,7 @@ package httprule
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -89,7 +89,7 @@ func decodeBody(rule *annotations.HttpRule, req *http.Request, target proto.Mess
 		return fmt.Errorf("invalid content type %s", contentType)
 	}
 
-	raw, err := ioutil.ReadAll(req.Body)
+	raw, err := io.ReadAll(req.Body)
 	if err != nil {
 		return err
 	}
