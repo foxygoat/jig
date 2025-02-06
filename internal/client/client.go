@@ -10,6 +10,7 @@ import (
 	"foxygo.at/jig/pb/greet"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -20,7 +21,7 @@ type Client struct {
 }
 
 func New(addr string) (*Client, error) {
-	cc, err := grpc.Dial(addr, grpc.WithInsecure())
+	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, err
 	}
