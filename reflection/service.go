@@ -6,7 +6,7 @@ import (
 	"foxygo.at/protog/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	pb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	pb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -34,12 +34,12 @@ func NewService(files FileDescriptorRanger) *Service {
 	r := cloneRegistry(files)
 	// Ignore the RegisterFile error on the assumption it means the reflection
 	// protofile is already registered.
-	_ = r.RegisterFile(pb.File_grpc_reflection_v1alpha_reflection_proto)
+	_ = r.RegisterFile(pb.File_grpc_reflection_v1_reflection_proto)
 	return &Service{registry: r}
 }
 
 // Register the s Service with the gs grpc ServiceRegistrar. This is a convenience
-// function so the caller does not need to import the grpc_reflection_v1alpha1
+// function so the caller does not need to import the grpc_reflection_v1
 // package.
 func (s *Service) Register(gs grpc.ServiceRegistrar) {
 	pb.RegisterServerReflectionServer(gs, s)

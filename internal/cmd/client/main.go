@@ -12,6 +12,7 @@ import (
 	"github.com/alecthomas/kong"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
@@ -43,7 +44,10 @@ func (cfg *config) AfterApply() error {
 }
 
 func (cfg *config) Run() error {
-	cc, err := grpc.Dial(cfg.Address, grpc.WithInsecure())
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	cc, err := grpc.NewClient(cfg.Address, opts...)
 	if err != nil {
 		return err
 	}

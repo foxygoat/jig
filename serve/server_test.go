@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"testing"
@@ -18,6 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protocmp"
@@ -271,7 +271,7 @@ func TestHTTPHandler(t *testing.T) {
 	url := fmt.Sprintf("http://%s/foo", ts.Addr())
 	httpResp, err := http.Get(url)
 	require.NoError(t, err)
-	body, err := ioutil.ReadAll(httpResp.Body)
+	body, err := io.ReadAll(httpResp.Body)
 	require.NoError(t, err)
 	require.Equal(t, "bar", string(body))
 }
@@ -283,7 +283,10 @@ type greeterClient struct {
 
 func newGreeterClient(t *testing.T, addr string) *greeterClient {
 	t.Helper()
-	cc, err := grpc.Dial(addr, grpc.WithInsecure())
+	dialOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	cc, err := grpc.NewClient(addr, dialOpts...)
 	require.NoError(t, err)
 	gc := greet.NewGreeterClient(cc)
 	return &greeterClient{

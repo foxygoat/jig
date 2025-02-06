@@ -15,6 +15,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/testing/protocmp"
 )
 
@@ -70,7 +71,10 @@ func TestExemplar(t *testing.T) {
 	ts.Start()
 	defer ts.Stop()
 
-	cc, err := grpc.Dial(ts.Addr(), grpc.WithInsecure())
+	dialOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+	cc, err := grpc.NewClient(ts.Addr(), dialOpts...)
 	require.NoError(t, err)
 	defer cc.Connect()
 	client := exemplar.NewExemplarClient(cc)
