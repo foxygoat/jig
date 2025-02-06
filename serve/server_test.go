@@ -1,18 +1,28 @@
 package serve
 
 import (
-	"bytes"
+	"context"
 	"embed"
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"testing"
 
-	"foxygo.at/jig/internal/client"
 	"foxygo.at/jig/log"
+	"foxygo.at/jig/pb/greet"
+	"github.com/google/go-cmp/cmp"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/testing/protocmp"
+	"google.golang.org/protobuf/types/descriptorpb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func newTestServer() *TestServer {
@@ -20,108 +30,196 @@ func newTestServer() *TestServer {
 	return NewTestServer(JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 }
 
-type testCase struct {
-	names []string
-	want  string
-}
-
-func TestGreeterSample(t *testing.T) {
+func TestGreeterUnary(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Stop()
-
-	c, err := client.New(ts.Addr())
-	require.NoError(t, err)
+	c := newGreeterClient(t, ts.Addr())
 	defer c.Close()
 
-	out := &bytes.Buffer{}
-
-	unaryWant := `
-Header: map[content-type:[application/grpc]]
-Greeting: 💃 jig [unary]: Hello 🌏
-Trailer: map[]`
-	clientWant := `
-Header: map[content-type:[application/grpc] count:[3]]
-Greeting: 💃 jig [client]: Hello 1 and 2 and 3
-Trailer: map[size:[35]]`
-	serverWant := `
-Header: map[content-type:[application/grpc]]
-Greeting: 💃 jig [server]: Hello Stranger
-Greeting: 💃 jig [server]: Goodbye Stranger
-Trailer: map[]`
-	bidiWant := `
-Header: map[content-type:[application/grpc]]
-Greeting: 💃 jig [bidi]: Hello a b c
-Trailer: map[]`
-
-	tests := map[string]testCase{
-		"unary":  {names: []string{"🌏"}, want: unaryWant},
-		"client": {names: []string{"1", "2", "3"}, want: clientWant},
-		"server": {names: []string{"Stranger"}, want: serverWant},
-		"bidi":   {names: []string{"a b c"}, want: bidiWant},
-	}
-
-	for name, tc := range tests {
-		name, tc := name, tc
-		t.Run(name, func(t *testing.T) {
-			out.Reset()
-			err := c.Call(out, tc.names, name)
-			require.NoError(t, err)
-			want := tc.want[1:] + "\n"
-			require.Equal(t, want, out.String())
-		})
-	}
+	var header, trailer metadata.MD
+	req := &greet.HelloRequest{FirstName: "🌏"}
+	resp, err := c.Hello(context.Background(), req, grpc.Header(&header), grpc.Trailer(&trailer))
+	require.NoError(t, err)
+	require.Equal(t, "💃 jig [unary]: Hello 🌏", resp.Greeting)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Empty(t, trailer)
 }
 
-type testCaseStatus struct {
-	names   []string
-	want    string
-	stream  string
-	errWant string
-}
-
-func TestGreeterSampleStatus(t *testing.T) {
+func TestGreeterUnaryWithStatusErr(t *testing.T) {
 	ts := newTestServer()
 	defer ts.Stop()
-
-	c, err := client.New(ts.Addr())
-	require.NoError(t, err)
+	c := newGreeterClient(t, ts.Addr())
 	defer c.Close()
 
-	out := &bytes.Buffer{}
+	var header, trailer metadata.MD
+	req := &greet.HelloRequest{FirstName: "Bart"}
+	resp, err := c.Hello(context.Background(), req, grpc.Header(&header), grpc.Trailer(&trailer))
+	require.Nil(t, resp)
+	// header
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Equal(t, []string{"my", "shorts"}, header.Get("eat"))
+	// trailer
+	require.Equal(t, []string{"cow"}, trailer.Get("a"))
+	require.Equal(t, []string{"have"}, trailer.Get("dont"))
+	// error
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.InvalidArgument, st.Code())
+	require.Equal(t, "💃 jig [unary]: eat my shorts", st.Message())
+	details := st.Details()
+	require.Len(t, details, 2)
+	wantDur := &durationpb.Duration{Seconds: 42}
+	diff := cmp.Diff(wantDur, details[0], protocmp.Transform())
+	require.Empty(t, diff)
+	gotOpt := details[1].(*descriptorpb.MethodOptions).String()
+	wantOpt := `[google.api.http]:{post:"/api/greet/hello"}`
+	require.Equal(t, wantOpt, gotOpt)
+}
 
-	unaryWant := `
-Header: map[content-type:[application/grpc] eat:[my shorts]]
-Trailer: map[a:[cow] dont:[have]]`
-	unaryErrWant := `
-rpc error: code = InvalidArgument desc = 💃 jig [unary]: eat my shorts
-seconds:42
-[google.api.http]:{post:"/api/greet/hello"}`
-	bidiWant := `
-Header: map[content-type:[application/grpc]]
-Greeting: 💃 jig [bidi]: Hello 1
-Trailer: map[]`
-	bidiErrWant := " rpc error: code = Internal desc = transport: SendHeader called multiple times"
-	bidiWant2 := `
-Header: map[content-type:[application/grpc] eat:[his shorts]]
-Trailer: map[]`
-	bidiErrWant2 := " rpc error: code = InvalidArgument desc = 💃 jig [bidi]: eat my shorts"
-	tests := map[string]testCaseStatus{
-		"unary": {names: []string{"Bart"}, want: unaryWant, errWant: unaryErrWant, stream: "unary"},
-		"bidi":  {names: []string{"1", "Bart", "3"}, want: bidiWant, errWant: bidiErrWant, stream: "bidi"},
-		"bidi2": {names: []string{"Bart"}, want: bidiWant2, errWant: bidiErrWant2, stream: "bidi"},
-		"bidi3": {names: []string{"1", "Bart"}, want: bidiWant, errWant: bidiErrWant, stream: "bidi"},
+func TestGreeterClientStream(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Stop()
+	c := newGreeterClient(t, ts.Addr())
+	defer c.Close()
+
+	stream, err := c.HelloClientStream(context.Background())
+	require.NoError(t, err)
+
+	names := []string{"1", "2", "3"}
+	for _, name := range names {
+		err := stream.Send(&greet.HelloRequest{FirstName: name})
+		require.NoError(t, err)
 	}
-	for name, tc := range tests {
-		name, tc := name, tc
-		t.Run(name, func(t *testing.T) {
-			out.Reset()
-			err := c.Call(out, tc.names, tc.stream)
-			require.Error(t, err)
-			require.Equal(t, tc.errWant[1:], err.Error())
-			want := tc.want[1:] + "\n"
-			require.Equal(t, want, out.String())
-		})
+	resp, err := stream.CloseAndRecv()
+	require.NoError(t, err)
+	wantGreeting := "💃 jig [client]: Hello 1 and 2 and 3"
+	require.Equal(t, wantGreeting, resp.Greeting)
+
+	header, err := stream.Header()
+	require.NoError(t, err)
+	trailer := stream.Trailer()
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Equal(t, []string{"3"}, header.Get("count"))
+	require.Equal(t, []string{"35"}, trailer.Get("size"))
+}
+
+func TestGreeterServerStream(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Stop()
+	c := newGreeterClient(t, ts.Addr())
+	defer c.Close()
+
+	req := &greet.HelloRequest{FirstName: "Stranger"}
+	stream, err := c.HelloServerStream(context.Background(), req)
+	require.NoError(t, err)
+	header, err := stream.Header()
+	require.NoError(t, err)
+	trailer := stream.Trailer()
+	var greetings []string
+	for {
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		greetings = append(greetings, resp.Greeting)
 	}
+	require.Equal(t, []string{"💃 jig [server]: Hello Stranger", "💃 jig [server]: Goodbye Stranger"}, greetings)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Empty(t, trailer)
+}
+
+func TestGreeterBidi(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Stop()
+	c := newGreeterClient(t, ts.Addr())
+	defer c.Close()
+
+	stream, err := c.HelloBidiStream(context.Background())
+	require.NoError(t, err)
+
+	names := []string{"a", "b", "c"}
+	for _, name := range names {
+		err := stream.Send(&greet.HelloRequest{FirstName: name})
+		require.NoError(t, err)
+	}
+	require.NoError(t, stream.CloseSend())
+	header, err := stream.Header()
+	require.NoError(t, err)
+	trailer := stream.Trailer()
+	var greetings []string
+	for {
+		resp, err := stream.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		require.NoError(t, err)
+		greetings = append(greetings, resp.Greeting)
+	}
+	require.NoError(t, err)
+	require.Equal(t, []string{"💃 jig [bidi]: Hello a", "💃 jig [bidi]: Hello b", "💃 jig [bidi]: Hello c"}, greetings)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Empty(t, trailer)
+}
+
+func TestGreeterBidiStatusErr(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Stop()
+	c := newGreeterClient(t, ts.Addr())
+	defer c.Close()
+
+	stream, err := c.HelloBidiStream(context.Background())
+	require.NoError(t, err)
+
+	err = stream.Send(&greet.HelloRequest{FirstName: "Bart"})
+	require.NoError(t, err)
+	require.NoError(t, stream.CloseSend())
+	resp, err := stream.Recv()
+	require.Error(t, err)
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.InvalidArgument, st.Code())
+	require.Equal(t, "💃 jig [bidi]: eat my shorts", st.Message())
+
+	require.Nil(t, resp)
+	require.Empty(t, stream.Trailer())
+	header, err := stream.Header()
+	require.NoError(t, err)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Equal(t, []string{"his", "shorts"}, header.Get("eat"))
+}
+
+func TestGreeterBidiMultiResponseStatusErr(t *testing.T) {
+	ts := newTestServer()
+	defer ts.Stop()
+	c := newGreeterClient(t, ts.Addr())
+	defer c.Close()
+
+	stream, err := c.HelloBidiStream(context.Background())
+	require.NoError(t, err)
+
+	err = stream.Send(&greet.HelloRequest{FirstName: "Amigo"})
+	require.NoError(t, err)
+	err = stream.Send(&greet.HelloRequest{FirstName: "Bart"})
+	require.NoError(t, err)
+	require.NoError(t, stream.CloseSend())
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	require.Equal(t, "💃 jig [bidi]: Hello Amigo", resp.Greeting)
+	resp, err = stream.Recv()
+	require.Error(t, err)
+
+	st, ok := status.FromError(err)
+	require.True(t, ok)
+	require.Equal(t, codes.Internal, st.Code())
+	require.Equal(t, "transport: SendHeader called multiple times", st.Message())
+
+	require.Nil(t, resp)
+	require.Empty(t, stream.Trailer())
+	header, err := stream.Header()
+	require.NoError(t, err)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
 }
 
 //go:embed testdata/greet
@@ -132,20 +230,16 @@ func TestGreeterEmbedFS(t *testing.T) {
 	require.NoError(t, err)
 	ts := NewTestServer(JsonnetEvaluator(), methodFS)
 	defer ts.Stop()
-
-	c, err := client.New(ts.Addr())
-	require.NoError(t, err)
+	c := newGreeterClient(t, ts.Addr())
 	defer c.Close()
 
-	out := &bytes.Buffer{}
-
-	want := `Header: map[content-type:[application/grpc]]
-Greeting: 💃 jig [unary]: Hello 🌏
-Trailer: map[]
-`
-	err = c.Call(out, []string{"🌏"}, "unary")
+	var header, trailer metadata.MD
+	req := &greet.HelloRequest{FirstName: "🌏"}
+	resp, err := c.Hello(context.Background(), req, grpc.Header(&header), grpc.Trailer(&trailer))
 	require.NoError(t, err)
-	require.Equal(t, want, out.String())
+	require.Equal(t, "💃 jig [unary]: Hello 🌏", resp.Greeting)
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Empty(t, trailer)
 }
 
 func TestHTTPHandler(t *testing.T) {
@@ -158,30 +252,42 @@ func TestHTTPHandler(t *testing.T) {
 	ts.Start()
 	defer ts.Stop()
 
-	c, err := client.New(ts.Addr())
-	require.NoError(t, err)
+	c := newGreeterClient(t, ts.Addr())
 	defer c.Close()
 
-	out := &bytes.Buffer{}
-
+	// Test that gRPC calls work when an http handler is installed
+	var header, trailer metadata.MD
+	req := &greet.HelloRequest{FirstName: "🌏"}
+	resp, err := c.Hello(context.Background(), req, grpc.Header(&header), grpc.Trailer(&trailer))
+	require.NoError(t, err)
+	require.Equal(t, "💃 jig [unary]: Hello 🌏", resp.Greeting)
 	// The http.Handler implementation of grpc.Server adds the "trailer" headers
 	// to the response. The built-in implementation does not.
-	grpcWant := `
-Header: map[content-type:[application/grpc] trailer:[Grpc-Status Grpc-Message Grpc-Status-Details-Bin]]
-Greeting: 💃 jig [unary]: Hello 🌏
-Trailer: map[]`
-
-	// Test that gRPC calls work when an http handler is installed
-	err = c.Call(out, []string{"🌏"}, "unary")
-	require.NoError(t, err)
-	want := grpcWant[1:] + "\n"
-	require.Equal(t, want, out.String())
+	require.Equal(t, []string{"application/grpc"}, header.Get("content-type"))
+	require.Equal(t, []string{"Grpc-Status", "Grpc-Message", "Grpc-Status-Details-Bin"}, header.Get("trailer"))
+	require.Empty(t, trailer)
 
 	// Test that the http handler is called
 	url := fmt.Sprintf("http://%s/foo", ts.Addr())
-	resp, err := http.Get(url)
+	httpResp, err := http.Get(url)
 	require.NoError(t, err)
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(httpResp.Body)
 	require.NoError(t, err)
 	require.Equal(t, "bar", string(body))
+}
+
+type greeterClient struct {
+	*grpc.ClientConn
+	greet.GreeterClient
+}
+
+func newGreeterClient(t *testing.T, addr string) *greeterClient {
+	t.Helper()
+	cc, err := grpc.Dial(addr, grpc.WithInsecure())
+	require.NoError(t, err)
+	gc := greet.NewGreeterClient(cc)
+	return &greeterClient{
+		ClientConn:    cc,
+		GreeterClient: gc,
+	}
 }
