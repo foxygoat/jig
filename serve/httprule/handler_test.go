@@ -21,12 +21,12 @@ import (
 
 func TestHTTP(t *testing.T) {
 	withLogger := serve.WithLogger(log.DiscardLogger)
-	ts := serve.NewTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
-	defer ts.Stop()
-
+	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/greet"), withLogger)
 	h, err := NewHandler(ts.Files, ts.UnknownHandler, WithLogger(log.DiscardLogger))
 	require.NoError(t, err)
 	ts.SetHTTPHandler(h)
+	ts.Start()
+	defer ts.Stop()
 
 	body := `{"first_name": "Stranger"}`
 	url := fmt.Sprintf("http://%s/api/greet/hello", ts.Addr())
@@ -113,9 +113,7 @@ func TestHTTP(t *testing.T) {
 func TestHTTPRuleInterpolation(t *testing.T) {
 	logger := log.NewLogger(io.Discard, log.LogLevelError)
 	withLogger := serve.WithLogger(logger)
-	ts := serve.NewTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/httpgreet"), withLogger)
-	defer ts.Stop()
-
+	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("testdata/httpgreet"), withLogger)
 	tmpl := []*annotations.HttpRule{
 		{Pattern: &annotations.HttpRule_Post{Post: "/post/{package}.{service}/{method}"}, Body: "*"},
 		{Pattern: &annotations.HttpRule_Get{Get: "/get/{method}"}},
@@ -123,6 +121,8 @@ func TestHTTPRuleInterpolation(t *testing.T) {
 	h, err := NewHandler(ts.Files, ts.UnknownHandler, WithLogger(logger), WithRuleTemplates(tmpl))
 	require.NoError(t, err)
 	ts.SetHTTPHandler(h)
+	ts.Start()
+	defer ts.Stop()
 
 	u := "http://" + ts.Addr() + "/get/SimpleHello"
 	req, err := http.NewRequest("GET", u, nil)
