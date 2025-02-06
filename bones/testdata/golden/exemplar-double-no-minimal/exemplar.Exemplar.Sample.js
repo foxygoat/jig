@@ -30,22 +30,16 @@ function Sample(input) {
         field: "",  // string
         repeat: [0],  // repeated int32
       },
-      aMap: [  // map<string, bool>
-        {
-          key: "",  // string
-          value: false,  // bool
-        }
-      ],
-      aDeepMap: [  // map<string, SampleMessage2>
-        {
-          key: "",  // string
-          value: {  // SampleMessage2
-            weirdFieldName1: "",  // string
-            aStringList: [""],  // repeated string
-            aMsgList: [{}],  // repeated SampleMessage1 (see example above)
-          },
-        }
-      ],
+      aMap: {  // map<int32, bool>
+        "0": false,
+      },
+      aDeepMap: {  // map<string, SampleMessage2>
+        "key": {
+          weirdFieldName1: "",  // string
+          aStringList: [""],  // repeated string
+          aMsgList: [{}],  // repeated SampleMessage1 (see example above)
+        },
+      },
       aIntList: [0],  // repeated int32
       aEnumList: ["SAMPLE_ENUM_FIRST"],  // repeated SampleEnum
       aMessageList: [{}],  // repeated SampleMessage1 (see example above)

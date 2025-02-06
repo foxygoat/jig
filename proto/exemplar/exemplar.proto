@@ -74,7 +74,7 @@ message SampleResponse {
   SampleMessage1 a_message = 17;
 
   // Maps
-  map<string, bool> a_map = 18;
+  map<int32, bool> a_map = 18;
   map<string, SampleMessage2> a_deep_map = 19;
 
   // Repeated
