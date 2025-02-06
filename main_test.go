@@ -27,7 +27,9 @@ func TestHTTPRuleServer(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("serve/testdata/httpgreet"), opts...)
-	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, log.DiscardLogger, nil))
+	handler, err := httprule.NewHandler(ts.Files, ts.UnknownHandler, httprule.WithLogger(log.DiscardLogger))
+	require.NoError(t, err)
+	ts.SetHTTPHandler(handler)
 	ts.Start()
 	defer ts.Stop()
 
@@ -62,7 +64,9 @@ func TestExemplar(t *testing.T) {
 	require.NoError(t, err)
 
 	ts := serve.NewUnstartedTestServer(serve.JsonnetEvaluator(), os.DirFS("bones/testdata/golden/exemplar-single-no-minimal"), opts...)
-	ts.SetHTTPHandler(httprule.NewServer(ts.Files, ts.UnknownHandler, log.DiscardLogger, nil))
+	handler, err := httprule.NewHandler(ts.Files, ts.UnknownHandler, httprule.WithLogger(log.DiscardLogger))
+	require.NoError(t, err)
+	ts.SetHTTPHandler(handler)
 	ts.Start()
 	defer ts.Stop()
 
