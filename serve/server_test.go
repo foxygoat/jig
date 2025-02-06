@@ -149,14 +149,14 @@ Trailer: map[]
 }
 
 func TestHTTPHandler(t *testing.T) {
-	ts := newTestServer()
-	defer ts.Stop()
-
+	ts := NewUnstartedTestServer(JsonnetEvaluator(), os.DirFS("testdata/greet"), WithLogger(log.DiscardLogger))
 	mux := http.NewServeMux()
 	mux.HandleFunc("/foo", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("bar")) //nolint:errcheck
 	})
 	ts.SetHTTPHandler(mux)
+	ts.Start()
+	defer ts.Stop()
 
 	c, err := client.New(ts.Addr())
 	require.NoError(t, err)
