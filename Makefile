@@ -113,7 +113,7 @@ GENPROTO_PB_FLAGS = --descriptor_set_out=$(PROTO:proto/%.proto=pb/%.pb) --includ
 release: nexttag  ## Tag and release binaries for different OS on GitHub release
 	git tag $(NEXTTAG)
 	git push origin $(NEXTTAG)
-	goreleaser release --rm-dist
+	goreleaser release --clean
 
 nexttag:
 	$(eval NEXTTAG := $(shell $(NEXTTAG_CMD)))
